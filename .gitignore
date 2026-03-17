@@ -1,0 +1,8 @@
+node_modules/
+.env
+uploads/*
+!uploads/.gitkeep
+firebase-service-account.json
+*.log
+logs/
+*.pem
