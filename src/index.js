@@ -38,7 +38,18 @@ Promise.all([pubClient.connect?.() ?? Promise.resolve(), subClient.connect?.() ?
 setupSocket(io);
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
-app.use(helmet());                          // Security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net"],
+      styleSrc: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net"],
+      fontSrc: ["'self'", "cdn.jsdelivr.net", "data:"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'"],
+    },
+  },
+}));                                        // Security headers
 app.use(morgan('combined'));                // Request logging
 app.use(cors({
   origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*',
