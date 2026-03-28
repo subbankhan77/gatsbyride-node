@@ -68,6 +68,13 @@
     /* ── Pagination ── */
     .pg-info { font-size:.85rem; color:#6c757d; }
 
+    /* ── Toast ── */
+    #toastBox { position:fixed; bottom:24px; right:24px; z-index:9999; display:flex; flex-direction:column; gap:8px; }
+    .toast-msg { padding:12px 20px; border-radius:8px; color:#fff; font-size:.9rem; font-weight:500; box-shadow:0 4px 12px rgba(0,0,0,.2); animation: slideIn .3s ease; }
+    .toast-success { background:#059669; }
+    .toast-error   { background:#dc2626; }
+    @keyframes slideIn { from { opacity:0; transform:translateX(40px); } to { opacity:1; transform:translateX(0); } }
+
     @media(max-width:768px){
       #sidebar { transform:translateX(-100%); }
       #sidebar.open { transform:translateX(0); }
@@ -364,14 +371,7 @@
 </div>
 
 <!-- ═══ TOAST ═══ -->
-<div class="position-fixed bottom-0 end-0 p-3" style="z-index:9999">
-  <div id="toast" class="toast align-items-center text-white border-0" role="alert">
-    <div class="d-flex">
-      <div class="toast-body" id="toastMsg"></div>
-      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-    </div>
-  </div>
-</div>
+<div id="toastBox"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
@@ -390,10 +390,12 @@ const limit = 15;
 const $ = id => document.getElementById(id);
 
 function showToast(msg, success = true) {
-  const t = $('toast');
-  $('toastMsg').textContent = msg;
-  t.className = `toast align-items-center text-white border-0 bg-${success ? 'success' : 'danger'}`;
-  bootstrap.Toast.getOrCreateInstance(t, { delay: 3000 }).show();
+  const box = $('toastBox');
+  const el = document.createElement('div');
+  el.className = `toast-msg ${success ? 'toast-success' : 'toast-error'}`;
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
 }
 
 async function api(method, path, body, isForm = false) {
@@ -419,10 +421,7 @@ function orderStatusLabel(s) {
 }
 
 function confirmDelete(msg, cb) {
-  $('confirmMsg').textContent = msg;
-  const m = bootstrap.Modal.getOrCreateInstance($('confirmModal'));
-  m.show();
-  $('confirmOkBtn').onclick = () => { m.hide(); cb(); };
+  if (window.confirm(msg)) cb();
 }
 
 function pagBar(containerId, page, total, onPage) {
