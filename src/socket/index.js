@@ -1,6 +1,7 @@
-const { Driver, Order } = require('../models');
+const { Driver, Customer, Order, ChatMessage } = require('../models');
 const jwt = require('jsonwebtoken');
 const { getLiveETA } = require('../utils/helpers');
+const { sendNotification } = require('../utils/fcm');
 const {
   driverOnline,
   updateDriverLocation,
@@ -157,14 +158,54 @@ function setupSocket(io) {
     });
 
     // ── Simple Chat (driver ↔ customer) ───────────────────────────────────────
-    socket.on('send_message', (data) => {
-      const { to_room, message, sender_id, sender_type } = data;
-      io.to(to_room).emit('receive_message', {
+    socket.on('send_message', async (data) => {
+      const { to_room, message, sender_id, sender_type, receiver_id, order_id } = data;
+      const actualSenderId = sender_id || socket.userId;
+
+      const msgPayload = {
         message,
-        sender_id: sender_id || socket.userId,
+        sender_id: actualSenderId,
         sender_type,
+        order_id,
         timestamp: new Date().toISOString(),
-      });
+      };
+
+      // Online users ko deliver karo
+      io.to(to_room).emit('receive_message', msgPayload);
+
+      // DB mein save karo (chat history ke liye)
+      ChatMessage.create({
+        order_id: order_id || null,
+        sender_id: actualSenderId,
+        sender_type: sender_type || 'customer',
+        receiver_id: receiver_id || null,
+        message,
+      }).catch((err) => console.error('Chat save error:', err.message));
+
+      // Receiver offline hai to FCM bhejo
+      if (receiver_id) {
+        const roomSize = io.sockets.adapter.rooms.get(to_room)?.size || 0;
+        if (roomSize === 0) {
+          const ReceiverModel = sender_type === 'driver' ? Customer : Driver;
+          const receiver = await ReceiverModel.findByPk(receiver_id, {
+            attributes: ['fcm_token'],
+          }).catch(() => null);
+
+          if (receiver?.fcm_token) {
+            sendNotification(
+              receiver.fcm_token,
+              'New Message',
+              String(message).substring(0, 100),
+              {
+                type: 'chat',
+                order_id: String(order_id || ''),
+                sender_id: String(actualSenderId),
+                sender_type: String(sender_type || ''),
+              }
+            ).catch((err) => console.error('Chat FCM error:', err.message));
+          }
+        }
+      }
     });
 
     // ── Disconnect ────────────────────────────────────────────────────────────

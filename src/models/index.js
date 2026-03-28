@@ -226,16 +226,33 @@ const Payment = sequelize.define('Payment', {
 });
 
 // ─── UserCardDetails Model ────────────────────────────────────────────────────
+// SECURITY: card_number/expiry kabhi store nahi karna — Stripe PM ID use karo
 const UserCardDetails = sequelize.define('UserCardDetails', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   user_id: DataTypes.INTEGER,
-  card_number: DataTypes.STRING,
+  stripe_payment_method_id: DataTypes.STRING,   // pm_xxxx — Stripe se lo
+  last_four: DataTypes.STRING(4),                // sirf last 4 digits
   card_holder_name: DataTypes.STRING,
-  card_type: DataTypes.STRING,
-  expiry_date: DataTypes.STRING,
+  card_type: DataTypes.STRING,                   // visa, mastercard, amex, etc.
   status: DataTypes.TINYINT,
 }, {
   tableName: 'user_card_details',
+  timestamps: true,
+  createdAt: 'created_at',
+  updatedAt: 'updated_at',
+});
+
+// ─── ChatMessage Model ────────────────────────────────────────────────────────
+const ChatMessage = sequelize.define('ChatMessage', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  order_id: DataTypes.INTEGER,
+  sender_id: DataTypes.INTEGER,
+  sender_type: { type: DataTypes.ENUM('customer', 'driver'), allowNull: false },
+  receiver_id: DataTypes.INTEGER,
+  message: DataTypes.TEXT,
+  is_read: { type: DataTypes.BOOLEAN, defaultValue: false },
+}, {
+  tableName: 'chat_messages',
   timestamps: true,
   createdAt: 'created_at',
   updatedAt: 'updated_at',
@@ -327,6 +344,9 @@ Payment.belongsTo(Driver, { foreignKey: 'driver_id' });
 Payment.belongsTo(Order, { foreignKey: 'order_id' });
 UserCardDetails.belongsTo(Customer, { foreignKey: 'user_id', as: 'customer' });
 
+ChatMessage.belongsTo(Order, { foreignKey: 'order_id' });
+Order.hasMany(ChatMessage, { foreignKey: 'order_id' });
+
 module.exports = {
   sequelize,
   Customer,
@@ -339,6 +359,7 @@ module.exports = {
   BankDetails,
   Payment,
   UserCardDetails,
+  ChatMessage,
   ContactUs,
   AboutUs,
   OrderSetting,

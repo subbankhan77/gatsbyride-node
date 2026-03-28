@@ -3,9 +3,10 @@ const router = express.Router();
 const verifyAdmin = require('../middleware/adminAuth');
 const upload = require('../utils/upload');
 const admin = require('../controllers/adminController');
+const { loginLimiter } = require('../middleware/rateLimiter');
 
 // ─── Public ───────────────────────────────────────────────────────────────────
-router.post('/login', admin.login);
+router.post('/login', loginLimiter, admin.login);
 
 // ─── All routes below require admin JWT ──────────────────────────────────────
 router.use(verifyAdmin);

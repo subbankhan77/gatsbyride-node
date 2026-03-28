@@ -16,7 +16,7 @@ const handleValidation = (req, res, next) => {
 // ─── Customer Register ────────────────────────────────────────────────────────
 const validateCustomerRegister = [
   body('email').isEmail().withMessage('Valid email required').normalizeEmail(),
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
   body('name').notEmpty().withMessage('Name is required').trim(),
   body('phone').optional().isMobilePhone().withMessage('Invalid phone number'),
   handleValidation,
@@ -25,7 +25,7 @@ const validateCustomerRegister = [
 // ─── Driver Register ──────────────────────────────────────────────────────────
 const validateDriverRegister = [
   body('email').isEmail().withMessage('Valid email required').normalizeEmail(),
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
   body('name').notEmpty().withMessage('Name is required').trim(),
   body('phone').optional().isMobilePhone().withMessage('Invalid phone number'),
   handleValidation,

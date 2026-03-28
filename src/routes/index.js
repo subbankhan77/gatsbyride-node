@@ -137,6 +137,12 @@ router.get('/order/route/:order_id', orderController.getOrderRoute);
 router.get('/surge/check',           orderController.getSurgeInfo);
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  CHAT HISTORY
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/order/chat/:order_id', verifyToken('customer'), orderController.getChatHistory);
+router.get('/driver/order/chat/:order_id', verifyToken('driver'), orderController.getChatHistory);
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  SHARED RATING ROUTES
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/order/rating',        verifyToken('customer'), orderController.submitRating);

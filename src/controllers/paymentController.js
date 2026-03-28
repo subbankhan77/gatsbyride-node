@@ -3,20 +3,39 @@ const { UserCardDetails, Payment, Order } = require('../models');
 const { apiResponse } = require('../utils/helpers');
 
 // ─── Add Card ─────────────────────────────────────────────────────────────────
+// Frontend Stripe.js se payment_method_id bheje — raw card kabhi server pe nahi aana chahiye
 exports.addCard = async (req, res) => {
   try {
-    const { card_number, card_holder_name, card_type, expiry_date } = req.body;
+    const { payment_method_id, card_holder_name } = req.body;
+    if (!payment_method_id) return apiResponse(res, 422, false, 'payment_method_id required');
+
+    // Stripe se card details fetch karo (last4, brand) — raw number nahi store karna
+    const pm = await stripe.paymentMethods.retrieve(payment_method_id);
+    if (!pm || pm.type !== 'card') {
+      return apiResponse(res, 422, false, 'Invalid payment method');
+    }
+
+    // Duplicate check
+    const existing = await UserCardDetails.findOne({
+      where: { user_id: req.user.id, stripe_payment_method_id: payment_method_id, status: 1 },
+    });
+    if (existing) return apiResponse(res, 409, false, 'Card already added');
 
     const card = await UserCardDetails.create({
       user_id: req.user.id,
-      card_number,
-      card_holder_name,
-      card_type,
-      expiry_date,
+      stripe_payment_method_id: payment_method_id,
+      last_four: pm.card?.last4,
+      card_type: pm.card?.brand,
+      card_holder_name: card_holder_name || pm.billing_details?.name || '',
       status: 1,
     });
 
-    return apiResponse(res, 201, true, 'Card added', card);
+    return apiResponse(res, 201, true, 'Card added', {
+      id: card.id,
+      last_four: card.last_four,
+      card_type: card.card_type,
+      card_holder_name: card.card_holder_name,
+    });
   } catch (err) {
     return apiResponse(res, 500, false, err.message);
   }
@@ -27,6 +46,7 @@ exports.listCards = async (req, res) => {
   try {
     const cards = await UserCardDetails.findAll({
       where: { user_id: req.user.id, status: 1 },
+      attributes: ['id', 'stripe_payment_method_id', 'last_four', 'card_type', 'card_holder_name'],
     });
     return apiResponse(res, 200, true, 'Cards', cards);
   } catch (err) {

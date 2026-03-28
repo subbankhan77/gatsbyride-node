@@ -1,7 +1,7 @@
 const { Op } = require('sequelize');
 const {
   Order, Driver, Customer, VehicleCategory, Rating,
-  OrderReject, Reason, Payment
+  OrderReject, Reason, ChatMessage,
 } = require('../models');
 const { sendNotification, sendMulticastNotification } = require('../utils/fcm');
 const {
@@ -528,7 +528,15 @@ exports.driverNewRequests = async (req, res) => {
 exports.driverAcceptOrder = async (req, res) => {
   try {
     const { order_id } = req.body;
-    const { sequelize } = require('../models');
+
+    // Driver verification check — unverified driver order accept nahi kar sakta
+    const driver = await Driver.findByPk(req.user.id, { attributes: ['verification_status', 'status'] });
+    if (!driver || driver.verification_status !== 1) {
+      return apiResponse(res, 403, false, 'Account not verified. Please complete verification to accept orders.');
+    }
+    if (driver.status !== 1) {
+      return apiResponse(res, 403, false, 'Your account is suspended.');
+    }
 
     // Atomic UPDATE — sirf ek driver win karega, race condition impossible
     // driver_id = NULL check + status = PENDING check ek hi query mein
@@ -621,6 +629,32 @@ exports.getOrderRoute = async (req, res) => {
       start_coordinate: order.start_coordinate,
       end_coordinate: order.end_coordinate,
     });
+  } catch (err) {
+    return apiResponse(res, 500, false, err.message);
+  }
+};
+
+// ─── Chat History for an Order ───────────────────────────────────────────────
+exports.getChatHistory = async (req, res) => {
+  try {
+    const { order_id } = req.params;
+
+    // Sirf apna order ka chat dekh sakta hai
+    const order = await Order.findOne({
+      where: {
+        id: order_id,
+        [Op.or]: [{ customer_id: req.user.id }, { driver_id: req.user.id }],
+      },
+      attributes: ['id'],
+    });
+    if (!order) return apiResponse(res, 404, false, 'Order not found');
+
+    const messages = await ChatMessage.findAll({
+      where: { order_id },
+      order: [['created_at', 'ASC']],
+    });
+
+    return apiResponse(res, 200, true, 'Chat history', messages);
   } catch (err) {
     return apiResponse(res, 500, false, err.message);
   }
