@@ -28,6 +28,7 @@ router.get('/drivers/:id', admin.getDriver);
 router.put('/drivers/:id', admin.updateDriver);
 router.delete('/drivers/:id', admin.deleteDriver);
 router.post('/drivers/:id/toggle-status', admin.toggleDriverStatus);
+router.post('/drivers/:id/toggle-verification', admin.toggleDriverVerification);
 
 // Orders
 router.get('/orders', admin.getOrders);

@@ -448,6 +448,19 @@ document.addEventListener('click', async function(e) {
     btn.disabled = false;
   }
 
+  // Driver verify
+  if (btn.classList.contains('btn-verify-driver')) {
+    btn.disabled = true;
+    try {
+      await api('POST', `/drivers/${id}/toggle-verification`);
+      showToast('Verification status updated');
+      loadDrivers(pag.drivers);
+    } catch (err) {
+      showToast(err.message, false);
+    }
+    btn.disabled = false;
+  }
+
   // Driver delete
   if (btn.classList.contains('btn-delete-driver')) {
     if (!window.confirm('Delete this driver?')) return;
@@ -464,11 +477,11 @@ document.addEventListener('click', async function(e) {
   if (btn.classList.contains('btn-toggle-customer')) {
     btn.disabled = true;
     try {
-      const result = await api('POST', `/customers/${id}/toggle-status`);
-      alert('Success: ' + result.message);
+      await api('POST', `/customers/${id}/toggle-status`);
+      showToast('Customer status updated');
       loadCustomers(pag.customers);
     } catch (err) {
-      alert('Error: ' + err.message);
+      showToast(err.message, false);
     }
     btn.disabled = false;
   }
@@ -664,7 +677,8 @@ async function loadDrivers(page = 1) {
         <td>${statusBadge(dr.status)}</td>
         <td>${dr.verification_status==1?'<span class="status-badge badge-status-active">Verified</span>':'<span class="status-badge badge-status-inactive">Pending</span>'}</td>
         <td>
-          <button class="btn btn-sm btn-outline-warning me-1 btn-toggle-driver" data-id="${dr.id}" title="Toggle"><i class="bi bi-toggle-on"></i></button>
+          <button class="btn btn-sm btn-outline-warning me-1 btn-toggle-driver" data-id="${dr.id}" title="Toggle Status"><i class="bi bi-toggle-on"></i></button>
+          <button class="btn btn-sm btn-outline-success me-1 btn-verify-driver" data-id="${dr.id}" title="${dr.verification_status==1?'Unverify':'Verify'}"><i class="bi bi-patch-check"></i></button>
           <button class="btn btn-sm btn-outline-danger btn-delete-driver" data-id="${dr.id}" title="Delete"><i class="bi bi-trash"></i></button>
         </td>
       </tr>`).join('');

@@ -216,6 +216,17 @@ exports.toggleDriverStatus = async (req, res) => {
   }
 };
 
+exports.toggleDriverVerification = async (req, res) => {
+  try {
+    const driver = await Driver.findByPk(req.params.id);
+    if (!driver) return apiResponse(res, 404, false, 'Driver not found');
+    await driver.update({ verification_status: driver.verification_status === 1 ? 0 : 1 });
+    return apiResponse(res, 200, true, 'Verification status updated', driver);
+  } catch (err) {
+    return apiResponse(res, 500, false, err.message);
+  }
+};
+
 // Get all online drivers with live location (for map tracking)
 exports.getOnlineDrivers = async (req, res) => {
   try {
