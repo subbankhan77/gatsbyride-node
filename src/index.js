@@ -50,6 +50,11 @@ app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
+// Serve admin panel
+app.use('/admin', express.static(path.join(__dirname, '../public/admin')));
+app.get('/admin/en', (req, res) => res.redirect('/admin/en/'));
+app.get('/admin', (req, res) => res.redirect('/admin/en/'));
+
 // Attach io to every request (so controllers can emit events)
 app.use((req, res, next) => {
   req.io = io;

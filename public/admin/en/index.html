@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GatsbyRide Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <style>
+    :root { --sidebar-w: 240px; --primary: #1a1a2e; --accent: #e94560; }
+    body { background: #f4f6fb; font-family: 'Segoe UI', sans-serif; }
+
+    /* ── LOGIN ── */
+    #loginPage { display:flex; align-items:center; justify-content:center; min-height:100vh; background:linear-gradient(135deg,#1a1a2e,#16213e); }
+    .login-card { background:#fff; border-radius:16px; padding:40px; width:360px; box-shadow:0 20px 60px rgba(0,0,0,.4); }
+    .login-card .brand { font-size:1.6rem; font-weight:700; color:var(--accent); }
+
+    /* ── LAYOUT ── */
+    #appPage { display:none; }
+    #sidebar { width:var(--sidebar-w); min-height:100vh; background:var(--primary); position:fixed; top:0; left:0; z-index:100; transition:.3s; }
+    #sidebar .brand { padding:20px 16px; font-size:1.2rem; font-weight:700; color:#fff; border-bottom:1px solid rgba(255,255,255,.1); }
+    #sidebar .nav-link { color:rgba(255,255,255,.7); padding:10px 20px; border-radius:8px; margin:2px 8px; font-size:.9rem; display:flex; align-items:center; gap:10px; }
+    #sidebar .nav-link:hover, #sidebar .nav-link.active { background:var(--accent); color:#fff; }
+    #sidebar .nav-link i { font-size:1rem; width:20px; text-align:center; }
+    #main { margin-left:var(--sidebar-w); }
+    #topbar { background:#fff; padding:12px 24px; border-bottom:1px solid #e9ecef; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:99; }
+    #content { padding:24px; }
+
+    /* ── CARDS ── */
+    .stat-card { border:none; border-radius:12px; padding:20px; color:#fff; }
+    .stat-card .icon { font-size:2.5rem; opacity:.8; }
+    .stat-card .value { font-size:2rem; font-weight:700; }
+    .stat-card .label { opacity:.85; font-size:.85rem; }
+    .bg-grad-blue   { background:linear-gradient(135deg,#667eea,#764ba2); }
+    .bg-grad-green  { background:linear-gradient(135deg,#11998e,#38ef7d); }
+    .bg-grad-orange { background:linear-gradient(135deg,#f7971e,#ffd200); }
+    .bg-grad-red    { background:linear-gradient(135deg,#e94560,#c62a47); }
+    .bg-grad-purple { background:linear-gradient(135deg,#8e44ad,#3498db); }
+    .bg-grad-teal   { background:linear-gradient(135deg,#00b4db,#0083b0); }
+    .bg-grad-pink   { background:linear-gradient(135deg,#f953c6,#b91d73); }
+
+    /* ── TABLES ── */
+    .table-card { background:#fff; border-radius:12px; padding:20px; box-shadow:0 2px 12px rgba(0,0,0,.06); }
+    .table thead th { background:#f8f9fa; font-size:.8rem; text-transform:uppercase; letter-spacing:.5px; color:#6c757d; border:none; }
+    .table tbody td { vertical-align:middle; font-size:.9rem; }
+    .badge-status-active   { background:#d1fae5; color:#065f46; }
+    .badge-status-inactive { background:#fee2e2; color:#991b1b; }
+    .badge-status-pending  { background:#fef3c7; color:#92400e; }
+    .badge-online { background:#d1fae5; color:#065f46; }
+    .badge-offline{ background:#f1f5f9; color:#64748b; }
+
+    .section { display:none; }
+    .section.active { display:block; }
+
+    /* ── STATUS BADGE ── */
+    .status-badge { padding:3px 10px; border-radius:20px; font-size:.75rem; font-weight:600; }
+
+    /* ── avatar ── */
+    .avatar { width:36px; height:36px; border-radius:50%; object-fit:cover; background:#e9ecef; display:flex; align-items:center; justify-content:center; }
+
+    /* ── MODAL backdrop fix ── */
+    .modal-backdrop { z-index:1040; }
+    .modal { z-index:1050; }
+
+    /* ── Loader ── */
+    .loader { text-align:center; padding:40px; color:#6c757d; }
+
+    /* ── Pagination ── */
+    .pg-info { font-size:.85rem; color:#6c757d; }
+
+    @media(max-width:768px){
+      #sidebar { transform:translateX(-100%); }
+      #sidebar.open { transform:translateX(0); }
+      #main { margin-left:0; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════ LOGIN ═══════════════ -->
+<div id="loginPage">
+  <div class="login-card">
+    <div class="brand text-center mb-1"><i class="bi bi-car-front-fill"></i> GatsbyRide</div>
+    <p class="text-center text-muted mb-4" style="font-size:.85rem">Admin Panel</p>
+    <div id="loginError" class="alert alert-danger d-none"></div>
+    <form id="loginForm">
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Email</label>
+        <input type="email" id="loginEmail" class="form-control" placeholder="admin@example.com" required/>
+      </div>
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Password</label>
+        <input type="password" id="loginPassword" class="form-control" placeholder="••••••••" required/>
+      </div>
+      <button type="submit" class="btn btn-danger w-100 fw-semibold" id="loginBtn">
+        <span id="loginBtnText">Sign In</span>
+        <span id="loginSpinner" class="spinner-border spinner-border-sm d-none"></span>
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════ APP ═══════════════ -->
+<div id="appPage">
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div class="brand"><i class="bi bi-car-front-fill text-danger"></i> GatsbyRide</div>
+    <nav class="nav flex-column mt-2">
+      <a href="#" class="nav-link active" data-section="dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a>
+      <a href="#" class="nav-link" data-section="customers"><i class="bi bi-people"></i> Customers</a>
+      <a href="#" class="nav-link" data-section="drivers"><i class="bi bi-person-badge"></i> Drivers</a>
+      <a href="#" class="nav-link" data-section="orders"><i class="bi bi-receipt"></i> Orders</a>
+      <a href="#" class="nav-link" data-section="vehicles"><i class="bi bi-truck"></i> Vehicle Categories</a>
+      <a href="#" class="nav-link" data-section="reasons"><i class="bi bi-x-circle"></i> Cancel Reasons</a>
+      <a href="#" class="nav-link" data-section="about"><i class="bi bi-info-circle"></i> About Us</a>
+      <a href="#" class="nav-link" data-section="settings"><i class="bi bi-gear"></i> Settings</a>
+      <a href="#" class="nav-link" data-section="admins"><i class="bi bi-shield-lock"></i> Admins</a>
+      <hr style="border-color:rgba(255,255,255,.1);margin:8px 16px"/>
+      <a href="#" class="nav-link text-danger" id="logoutBtn"><i class="bi bi-box-arrow-left"></i> Logout</a>
+    </nav>
+  </div>
+
+  <!-- Main -->
+  <div id="main">
+    <!-- Topbar -->
+    <div id="topbar">
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-light d-md-none" id="menuToggle"><i class="bi bi-list fs-5"></i></button>
+        <span id="pageTitle" class="fw-semibold fs-5">Dashboard</span>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-danger" id="adminBadge"></span>
+        <i class="bi bi-person-circle fs-4 text-secondary"></i>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div id="content">
+
+      <!-- ── DASHBOARD ── -->
+      <div class="section active" id="sec-dashboard">
+        <div class="row g-3 mb-4" id="statsRow">
+          <div class="col-12 text-center py-4 text-muted">Loading stats…</div>
+        </div>
+      </div>
+
+      <!-- ── CUSTOMERS ── -->
+      <div class="section" id="sec-customers">
+        <div class="table-card">
+          <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+            <h6 class="mb-0 fw-bold">Customers</h6>
+            <input type="search" id="customerSearch" class="form-control form-control-sm w-auto" placeholder="Search…"/>
+          </div>
+          <div id="customerTable"><div class="loader"><div class="spinner-border text-primary"></div></div></div>
+          <div class="d-flex justify-content-between align-items-center mt-3" id="customerPag"></div>
+        </div>
+      </div>
+
+      <!-- ── DRIVERS ── -->
+      <div class="section" id="sec-drivers">
+        <div class="table-card">
+          <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+            <h6 class="mb-0 fw-bold">Drivers</h6>
+            <div class="d-flex gap-2">
+              <select id="driverStatusFilter" class="form-select form-select-sm">
+                <option value="">All Status</option>
+                <option value="1">Active</option>
+                <option value="0">Inactive</option>
+              </select>
+              <input type="search" id="driverSearch" class="form-control form-control-sm" placeholder="Search…"/>
+            </div>
+          </div>
+          <div id="driverTable"><div class="loader"><div class="spinner-border text-primary"></div></div></div>
+          <div class="d-flex justify-content-between align-items-center mt-3" id="driverPag"></div>
+        </div>
+      </div>
+
+      <!-- ── ORDERS ── -->
+      <div class="section" id="sec-orders">
+        <div class="table-card">
+          <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+            <h6 class="mb-0 fw-bold">Orders</h6>
+            <div class="d-flex gap-2">
+              <select id="orderStatusFilter" class="form-select form-select-sm">
+                <option value="">All Status</option>
+                <option value="0">Pending</option>
+                <option value="1">Accepted</option>
+                <option value="7">Completed</option>
+                <option value="8">Cancelled</option>
+              </select>
+              <input type="search" id="orderSearch" class="form-control form-control-sm" placeholder="Search address…"/>
+            </div>
+          </div>
+          <div id="orderTable"><div class="loader"><div class="spinner-border text-primary"></div></div></div>
+          <div class="d-flex justify-content-between align-items-center mt-3" id="orderPag"></div>
+        </div>
+      </div>
+
+      <!-- ── VEHICLES ── -->
+      <div class="section" id="sec-vehicles">
+        <div class="table-card">
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <h6 class="mb-0 fw-bold">Vehicle Categories</h6>
+            <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#vehicleModal" onclick="openVehicleModal()">
+              <i class="bi bi-plus-lg"></i> Add
+            </button>
+          </div>
+          <div id="vehicleTable"><div class="loader"><div class="spinner-border text-primary"></div></div></div>
+        </div>
+      </div>
+
+      <!-- ── REASONS ── -->
+      <div class="section" id="sec-reasons">
+        <div class="table-card">
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <h6 class="mb-0 fw-bold">Cancellation Reasons</h6>
+            <button class="btn btn-sm btn-danger" onclick="openReasonModal()">
+              <i class="bi bi-plus-lg"></i> Add
+            </button>
+          </div>
+          <div id="reasonTable"><div class="loader"><div class="spinner-border text-primary"></div></div></div>
+        </div>
+      </div>
+
+      <!-- ── ABOUT ── -->
+      <div class="section" id="sec-about">
+        <div class="table-card">
+          <h6 class="fw-bold mb-3">About Us</h6>
+          <textarea id="aboutContent" class="form-control mb-3" rows="10" placeholder="Enter about us content…"></textarea>
+          <button class="btn btn-danger" onclick="saveAbout()">Save Changes</button>
+        </div>
+      </div>
+
+      <!-- ── SETTINGS ── -->
+      <div class="section" id="sec-settings">
+        <div class="table-card">
+          <h6 class="fw-bold mb-3">App Settings</h6>
+          <div id="settingsForm"><div class="loader"><div class="spinner-border text-primary"></div></div></div>
+          <button class="btn btn-danger mt-3 d-none" id="saveSettingsBtn" onclick="saveSettings()">Save Settings</button>
+        </div>
+      </div>
+
+      <!-- ── ADMINS ── -->
+      <div class="section" id="sec-admins">
+        <div class="table-card">
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <h6 class="mb-0 fw-bold">Admin Users</h6>
+            <button class="btn btn-sm btn-danger" onclick="openAdminModal()">
+              <i class="bi bi-plus-lg"></i> Add Admin
+            </button>
+          </div>
+          <div id="adminTable"><div class="loader"><div class="spinner-border text-primary"></div></div></div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /appPage -->
+
+<!-- ═══ VEHICLE MODAL ═══ -->
+<div class="modal fade" id="vehicleModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="vehicleModalTitle">Add Vehicle Category</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="vehicleId"/>
+        <div class="row g-3">
+          <div class="col-md-6"><label class="form-label">Category Name</label><input type="text" id="vCategory" class="form-control" placeholder="e.g. Economy"/></div>
+          <div class="col-md-6"><label class="form-label">Image</label><input type="file" id="vImage" class="form-control" accept="image/*"/></div>
+          <div class="col-md-4"><label class="form-label">Price/km</label><input type="number" id="vPriceKm" class="form-control" step="0.01"/></div>
+          <div class="col-md-4"><label class="form-label">Price/min</label><input type="number" id="vPriceMin" class="form-control" step="0.01"/></div>
+          <div class="col-md-4"><label class="form-label">Base Fare</label><input type="number" id="vBaseFare" class="form-control" step="0.01"/></div>
+          <div class="col-md-4"><label class="form-label">Tech Fee (%)</label><input type="number" id="vTechFee" class="form-control" step="0.01"/></div>
+          <div class="col-md-4"><label class="form-label">Min km</label><input type="number" id="vMinKm" class="form-control" step="0.01"/></div>
+          <div class="col-md-4"><label class="form-label">Min Price</label><input type="number" id="vMinPrice" class="form-control" step="0.01"/></div>
+          <div class="col-md-4"><label class="form-label">Extra km Price</label><input type="number" id="vExtraKm" class="form-control" step="0.01"/></div>
+          <div class="col-md-4"><label class="form-label">Seat Capacity</label><input type="number" id="vSeat" class="form-control"/></div>
+          <div class="col-md-4">
+            <label class="form-label">Night Service</label>
+            <select id="vNightService" class="form-select">
+              <option value="0">No</option>
+              <option value="1">Yes</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-danger" onclick="saveVehicle()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ REASON MODAL ═══ -->
+<div class="modal fade" id="reasonModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="reasonModalTitle">Add Reason</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="reasonId"/>
+        <label class="form-label">Reason</label>
+        <input type="text" id="reasonText" class="form-control" placeholder="Enter cancellation reason…"/>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-danger" onclick="saveReason()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ ADMIN MODAL ═══ -->
+<div class="modal fade" id="adminModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="adminModalTitle">Add Admin</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="adminId"/>
+        <div class="mb-3"><label class="form-label">Name</label><input type="text" id="adminName" class="form-control"/></div>
+        <div class="mb-3"><label class="form-label">Username</label><input type="text" id="adminUsername" class="form-control"/></div>
+        <div class="mb-3"><label class="form-label">Email</label><input type="email" id="adminEmail" class="form-control"/></div>
+        <div class="mb-3"><label class="form-label">Password <small class="text-muted">(leave blank to keep)</small></label><input type="password" id="adminPassword" class="form-control"/></div>
+        <div class="mb-3">
+          <label class="form-label">Status</label>
+          <select id="adminStatus" class="form-select">
+            <option value="1">Active</option>
+            <option value="0">Inactive</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-danger" onclick="saveAdmin()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CONFIRM DELETE MODAL ═══ -->
+<div class="modal fade" id="confirmModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-body text-center py-4">
+        <i class="bi bi-exclamation-triangle-fill text-danger fs-1"></i>
+        <p class="mt-2 mb-0" id="confirmMsg">Are you sure?</p>
+      </div>
+      <div class="modal-footer justify-content-center">
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-danger btn-sm" id="confirmOkBtn">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TOAST ═══ -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index:9999">
+  <div id="toast" class="toast align-items-center text-white border-0" role="alert">
+    <div class="d-flex">
+      <div class="toast-body" id="toastMsg"></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════════════════════════════
+const API = '/api/admin';
+let token = localStorage.getItem('adminToken') || '';
+let currentAdminEmail = localStorage.getItem('adminEmail') || '';
+
+// pagination state
+const pag = { customers: 1, drivers: 1, orders: 1 };
+const limit = 15;
+
+// ─── helpers ─────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+function showToast(msg, success = true) {
+  const t = $('toast');
+  $('toastMsg').textContent = msg;
+  t.className = `toast align-items-center text-white border-0 bg-${success ? 'success' : 'danger'}`;
+  bootstrap.Toast.getOrCreateInstance(t, { delay: 3000 }).show();
+}
+
+async function api(method, path, body, isForm = false) {
+  const opts = { method, headers: { Authorization: `Bearer ${token}` } };
+  if (body && isForm) { opts.body = body; }
+  else if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  const r = await fetch(API + path, opts);
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.message || 'Error');
+  return data;
+}
+
+function statusBadge(val) {
+  return val == 1
+    ? '<span class="status-badge badge-status-active">Active</span>'
+    : '<span class="status-badge badge-status-inactive">Inactive</span>';
+}
+
+function orderStatusLabel(s) {
+  const map = { 0:'Pending',1:'Accepted',2:'Picked Up',3:'On the way',4:'Nearby',5:'Arrived',6:'Started',7:'Completed',8:'Cancelled' };
+  const cls = { 7:'success',8:'danger',0:'warning',1:'primary' };
+  return `<span class="badge bg-${cls[s]||'secondary'}">${map[s]||s}</span>`;
+}
+
+function confirmDelete(msg, cb) {
+  $('confirmMsg').textContent = msg;
+  const m = bootstrap.Modal.getOrCreateInstance($('confirmModal'));
+  m.show();
+  $('confirmOkBtn').onclick = () => { m.hide(); cb(); };
+}
+
+function pagBar(containerId, page, total, onPage) {
+  const totalPages = Math.ceil(total / limit);
+  const el = $(containerId);
+  if (!el) return;
+  el.innerHTML = `<span class="pg-info">Total: ${total} | Page ${page} of ${totalPages}</span>
+  <div class="btn-group btn-group-sm">
+    <button class="btn btn-outline-secondary" ${page<=1?'disabled':''} onclick="(${onPage})(${page-1})">
+      <i class="bi bi-chevron-left"></i></button>
+    <button class="btn btn-outline-secondary" ${page>=totalPages?'disabled':''} onclick="(${onPage})(${page+1})">
+      <i class="bi bi-chevron-right"></i></button>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  AUTH
+// ═══════════════════════════════════════════════════════════════════
+function showApp() {
+  $('loginPage').style.display = 'none';
+  $('appPage').style.display = 'block';
+  $('adminBadge').textContent = currentAdminEmail;
+}
+
+function showLogin() {
+  $('loginPage').style.display = 'flex';
+  $('appPage').style.display = 'none';
+}
+
+$('loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = $('loginBtn'); const txt = $('loginBtnText'); const spin = $('loginSpinner');
+  btn.disabled = true; txt.textContent = 'Signing in…'; spin.classList.remove('d-none');
+  $('loginError').classList.add('d-none');
+  try {
+    const r = await fetch(API + '/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: $('loginEmail').value, password: $('loginPassword').value }),
+    });
+    const d = await r.json();
+    if (!d.status) throw new Error(d.message);
+    token = d.data.token;
+    currentAdminEmail = d.data.admin.email;
+    localStorage.setItem('adminToken', token);
+    localStorage.setItem('adminEmail', currentAdminEmail);
+    showApp();
+    loadSection('dashboard');
+  } catch (err) {
+    $('loginError').textContent = err.message;
+    $('loginError').classList.remove('d-none');
+  } finally {
+    btn.disabled = false; txt.textContent = 'Sign In'; spin.classList.add('d-none');
+  }
+});
+
+$('logoutBtn').addEventListener('click', e => {
+  e.preventDefault();
+  localStorage.removeItem('adminToken');
+  localStorage.removeItem('adminEmail');
+  token = '';
+  showLogin();
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════════════════════════
+const sectionNames = { dashboard:'Dashboard', customers:'Customers', drivers:'Drivers', orders:'Orders', vehicles:'Vehicle Categories', reasons:'Cancel Reasons', about:'About Us', settings:'Settings', admins:'Admins' };
+
+function loadSection(name) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('#sidebar .nav-link').forEach(l => l.classList.remove('active'));
+  const sec = $(`sec-${name}`);
+  if (sec) sec.classList.add('active');
+  const link = document.querySelector(`[data-section="${name}"]`);
+  if (link) link.classList.add('active');
+  $('pageTitle').textContent = sectionNames[name] || name;
+  // hide mobile sidebar
+  $('sidebar').classList.remove('open');
+  // load data
+  const loaders = { dashboard: loadDashboard, customers: () => loadCustomers(1), drivers: () => loadDrivers(1), orders: () => loadOrders(1), vehicles: loadVehicles, reasons: loadReasons, about: loadAbout, settings: loadSettings, admins: loadAdmins };
+  if (loaders[name]) loaders[name]();
+}
+
+document.querySelectorAll('#sidebar .nav-link[data-section]').forEach(link => {
+  link.addEventListener('click', e => { e.preventDefault(); loadSection(link.dataset.section); });
+});
+
+$('menuToggle').addEventListener('click', () => $('sidebar').classList.toggle('open'));
+
+// ═══════════════════════════════════════════════════════════════════
+//  DASHBOARD
+// ═══════════════════════════════════════════════════════════════════
+async function loadDashboard() {
+  try {
+    const d = await api('GET', '/dashboard');
+    const s = d.data;
+    $('statsRow').innerHTML = `
+      <div class="col-6 col-md-4 col-xl-3"><div class="stat-card bg-grad-blue"><div class="d-flex justify-content-between"><div><div class="value">${s.total_customers}</div><div class="label">Total Customers</div></div><i class="bi bi-people icon"></i></div></div></div>
+      <div class="col-6 col-md-4 col-xl-3"><div class="stat-card bg-grad-green"><div class="d-flex justify-content-between"><div><div class="value">${s.total_drivers}</div><div class="label">Total Drivers</div></div><i class="bi bi-person-badge icon"></i></div></div></div>
+      <div class="col-6 col-md-4 col-xl-3"><div class="stat-card bg-grad-orange"><div class="d-flex justify-content-between"><div><div class="value">${s.total_orders}</div><div class="label">Total Orders</div></div><i class="bi bi-receipt icon"></i></div></div></div>
+      <div class="col-6 col-md-4 col-xl-3"><div class="stat-card bg-grad-teal"><div class="d-flex justify-content-between"><div><div class="value">${s.online_drivers}</div><div class="label">Online Drivers</div></div><i class="bi bi-broadcast icon"></i></div></div></div>
+      <div class="col-6 col-md-4 col-xl-3"><div class="stat-card bg-grad-green"><div class="d-flex justify-content-between"><div><div class="value">${s.completed_orders}</div><div class="label">Completed</div></div><i class="bi bi-check-circle icon"></i></div></div></div>
+      <div class="col-6 col-md-4 col-xl-3"><div class="stat-card bg-grad-red"><div class="d-flex justify-content-between"><div><div class="value">${s.cancelled_orders}</div><div class="label">Cancelled</div></div><i class="bi bi-x-circle icon"></i></div></div></div>
+      <div class="col-6 col-md-4 col-xl-3"><div class="stat-card bg-grad-purple"><div class="d-flex justify-content-between"><div><div class="value">${s.pending_orders}</div><div class="label">Pending</div></div><i class="bi bi-clock icon"></i></div></div></div>
+      <div class="col-6 col-md-4 col-xl-3"><div class="stat-card bg-grad-pink"><div class="d-flex justify-content-between"><div><div class="value">${Number(s.total_revenue||0).toFixed(2)}</div><div class="label">Total Revenue</div></div><i class="bi bi-cash-stack icon"></i></div></div></div>
+    `;
+  } catch (e) { $('statsRow').innerHTML = `<div class="col-12 text-center text-danger">${e.message}</div>`; }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  CUSTOMERS
+// ═══════════════════════════════════════════════════════════════════
+let customerSearchTimer;
+$('customerSearch').addEventListener('input', () => {
+  clearTimeout(customerSearchTimer);
+  customerSearchTimer = setTimeout(() => loadCustomers(1), 400);
+});
+
+async function loadCustomers(page = 1) {
+  pag.customers = page;
+  const search = $('customerSearch').value;
+  $('customerTable').innerHTML = '<div class="loader"><div class="spinner-border text-primary"></div></div>';
+  try {
+    const d = await api('GET', `/customers?page=${page}&limit=${limit}${search?'&search='+encodeURIComponent(search):''}`);
+    const rows = d.data.data.map(c => `
+      <tr>
+        <td>${c.id}</td>
+        <td>${c.name || '-'}</td>
+        <td>${c.email || '-'}</td>
+        <td>${c.phone || '-'}</td>
+        <td>${statusBadge(c.status)}</td>
+        <td>${new Date(c.created_at).toLocaleDateString()}</td>
+        <td>
+          <button class="btn btn-xs btn-outline-warning btn-sm me-1" onclick="toggleCustomer(${c.id},${c.status})" title="Toggle Status"><i class="bi bi-toggle-on"></i></button>
+          <button class="btn btn-xs btn-outline-danger btn-sm" onclick="deleteCustomer(${c.id})" title="Delete"><i class="bi bi-trash"></i></button>
+        </td>
+      </tr>`).join('');
+    $('customerTable').innerHTML = `<table class="table table-hover"><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead><tbody>${rows||'<tr><td colspan="7" class="text-center text-muted">No customers found</td></tr>'}</tbody></table>`;
+    pagBar('customerPag', page, d.data.total, 'loadCustomers');
+  } catch (e) { $('customerTable').innerHTML = `<div class="text-danger text-center py-3">${e.message}</div>`; }
+}
+
+async function toggleCustomer(id, status) {
+  try { await api('PATCH', `/customers/${id}/toggle-status`); showToast('Status updated'); loadCustomers(pag.customers); } catch (e) { showToast(e.message, false); }
+}
+async function deleteCustomer(id) {
+  confirmDelete('Delete this customer?', async () => {
+    try { await api('DELETE', `/customers/${id}`); showToast('Customer deleted'); loadCustomers(pag.customers); } catch (e) { showToast(e.message, false); }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  DRIVERS
+// ═══════════════════════════════════════════════════════════════════
+let driverSearchTimer;
+$('driverSearch').addEventListener('input', () => { clearTimeout(driverSearchTimer); driverSearchTimer = setTimeout(() => loadDrivers(1), 400); });
+$('driverStatusFilter').addEventListener('change', () => loadDrivers(1));
+
+async function loadDrivers(page = 1) {
+  pag.drivers = page;
+  const search = $('driverSearch').value;
+  const status = $('driverStatusFilter').value;
+  $('driverTable').innerHTML = '<div class="loader"><div class="spinner-border text-primary"></div></div>';
+  try {
+    let qs = `page=${page}&limit=${limit}`;
+    if (search) qs += '&search=' + encodeURIComponent(search);
+    if (status !== '') qs += '&status=' + status;
+    const d = await api('GET', `/drivers?${qs}`);
+    const rows = d.data.data.map(dr => `
+      <tr>
+        <td>${dr.id}</td>
+        <td>${dr.name || '-'}</td>
+        <td>${dr.email || '-'}</td>
+        <td>${dr.phone || '-'}</td>
+        <td>${dr.plate_number || '-'}</td>
+        <td><span class="status-badge ${dr.order_status==='online'?'badge-online':'badge-offline'}">${dr.order_status||'offline'}</span></td>
+        <td>${statusBadge(dr.status)}</td>
+        <td>${dr.verification_status==1?'<span class="status-badge badge-status-active">Verified</span>':'<span class="status-badge badge-status-inactive">Pending</span>'}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-warning me-1" onclick="toggleDriver(${dr.id})" title="Toggle"><i class="bi bi-toggle-on"></i></button>
+          <button class="btn btn-sm btn-outline-danger" onclick="deleteDriver(${dr.id})" title="Delete"><i class="bi bi-trash"></i></button>
+        </td>
+      </tr>`).join('');
+    $('driverTable').innerHTML = `<table class="table table-hover"><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Plate</th><th>Online</th><th>Status</th><th>Verified</th><th>Actions</th></tr></thead><tbody>${rows||'<tr><td colspan="9" class="text-center text-muted">No drivers found</td></tr>'}</tbody></table>`;
+    pagBar('driverPag', page, d.data.total, 'loadDrivers');
+  } catch (e) { $('driverTable').innerHTML = `<div class="text-danger text-center py-3">${e.message}</div>`; }
+}
+
+async function toggleDriver(id) {
+  try { await api('PATCH', `/drivers/${id}/toggle-status`); showToast('Status updated'); loadDrivers(pag.drivers); } catch (e) { showToast(e.message, false); }
+}
+async function deleteDriver(id) {
+  confirmDelete('Delete this driver?', async () => {
+    try { await api('DELETE', `/drivers/${id}`); showToast('Driver deleted'); loadDrivers(pag.drivers); } catch (e) { showToast(e.message, false); }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ORDERS
+// ═══════════════════════════════════════════════════════════════════
+let orderSearchTimer;
+$('orderSearch').addEventListener('input', () => { clearTimeout(orderSearchTimer); orderSearchTimer = setTimeout(() => loadOrders(1), 400); });
+$('orderStatusFilter').addEventListener('change', () => loadOrders(1));
+
+async function loadOrders(page = 1) {
+  pag.orders = page;
+  const search = $('orderSearch').value;
+  const status = $('orderStatusFilter').value;
+  $('orderTable').innerHTML = '<div class="loader"><div class="spinner-border text-primary"></div></div>';
+  try {
+    let qs = `page=${page}&limit=${limit}`;
+    if (search) qs += '&search=' + encodeURIComponent(search);
+    if (status !== '') qs += '&status=' + status;
+    const d = await api('GET', `/orders?${qs}`);
+    const rows = d.data.data.map(o => `
+      <tr>
+        <td>#${o.id}</td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.start_address||'-'}</td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.end_address||'-'}</td>
+        <td>${o.Customer?.name||'-'}</td>
+        <td>${o.Driver?.name||'-'}</td>
+        <td>${orderStatusLabel(o.status)}</td>
+        <td>${o.total_amount||'-'}</td>
+        <td>${new Date(o.created_at).toLocaleDateString()}</td>
+      </tr>`).join('');
+    $('orderTable').innerHTML = `<table class="table table-hover"><thead><tr><th>ID</th><th>From</th><th>To</th><th>Customer</th><th>Driver</th><th>Status</th><th>Amount</th><th>Date</th></tr></thead><tbody>${rows||'<tr><td colspan="8" class="text-center text-muted">No orders found</td></tr>'}</tbody></table>`;
+    pagBar('orderPag', page, d.data.total, 'loadOrders');
+  } catch (e) { $('orderTable').innerHTML = `<div class="text-danger text-center py-3">${e.message}</div>`; }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  VEHICLE CATEGORIES
+// ═══════════════════════════════════════════════════════════════════
+async function loadVehicles() {
+  $('vehicleTable').innerHTML = '<div class="loader"><div class="spinner-border text-primary"></div></div>';
+  try {
+    const d = await api('GET', '/vehicle-categories');
+    const rows = d.data.map(v => `
+      <tr>
+        <td>${v.id}</td>
+        <td>${v.image ? `<img src="/uploads/${v.image}" style="width:40px;height:40px;object-fit:cover;border-radius:6px"/>` : '-'}</td>
+        <td>${v.category}</td>
+        <td>${v.price_km}</td>
+        <td>${v.price_min}</td>
+        <td>${v.base_fare}</td>
+        <td>${v.seat}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-primary me-1" onclick="editVehicle(${v.id})"><i class="bi bi-pencil"></i></button>
+          <button class="btn btn-sm btn-outline-danger" onclick="deleteVehicle(${v.id})"><i class="bi bi-trash"></i></button>
+        </td>
+      </tr>`).join('');
+    $('vehicleTable').innerHTML = `<table class="table table-hover"><thead><tr><th>ID</th><th>Image</th><th>Category</th><th>Price/km</th><th>Price/min</th><th>Base Fare</th><th>Seats</th><th>Actions</th></tr></thead><tbody>${rows||'<tr><td colspan="8" class="text-center text-muted">No categories</td></tr>'}</tbody></table>`;
+  } catch (e) { $('vehicleTable').innerHTML = `<div class="text-danger text-center py-3">${e.message}</div>`; }
+}
+
+let vehicleModal;
+function openVehicleModal(v = null) {
+  $('vehicleId').value = v?.id || '';
+  $('vehicleModalTitle').textContent = v ? 'Edit Vehicle Category' : 'Add Vehicle Category';
+  $('vCategory').value = v?.category || '';
+  $('vPriceKm').value = v?.price_km || '';
+  $('vPriceMin').value = v?.price_min || '';
+  $('vBaseFare').value = v?.base_fare || '';
+  $('vTechFee').value = v?.tech_fee || '';
+  $('vMinKm').value = v?.min_km || '';
+  $('vMinPrice').value = v?.min_price || '';
+  $('vExtraKm').value = v?.extra_km || '';
+  $('vSeat').value = v?.seat || '';
+  $('vNightService').value = v?.night_service || '0';
+  $('vImage').value = '';
+  bootstrap.Modal.getOrCreateInstance($('vehicleModal')).show();
+}
+
+async function editVehicle(id) {
+  try { const d = await api('GET', `/vehicle-categories`); const v = d.data.find(x => x.id == id); openVehicleModal(v); } catch (e) { showToast(e.message, false); }
+}
+
+async function saveVehicle() {
+  const id = $('vehicleId').value;
+  const form = new FormData();
+  form.append('category', $('vCategory').value);
+  form.append('price_km', $('vPriceKm').value);
+  form.append('price_min', $('vPriceMin').value);
+  form.append('base_fare', $('vBaseFare').value);
+  form.append('tech_fee', $('vTechFee').value);
+  form.append('min_km', $('vMinKm').value);
+  form.append('min_price', $('vMinPrice').value);
+  form.append('extra_km', $('vExtraKm').value);
+  form.append('seat', $('vSeat').value);
+  form.append('night_service', $('vNightService').value);
+  const img = $('vImage').files[0];
+  if (img) form.append('image', img);
+  try {
+    if (id) { await api('PUT', `/vehicle-categories/${id}`, form, true); }
+    else     { await api('POST', `/vehicle-categories`, form, true); }
+    bootstrap.Modal.getOrCreateInstance($('vehicleModal')).hide();
+    showToast('Saved!'); loadVehicles();
+  } catch (e) { showToast(e.message, false); }
+}
+
+async function deleteVehicle(id) {
+  confirmDelete('Delete this vehicle category?', async () => {
+    try { await api('DELETE', `/vehicle-categories/${id}`); showToast('Deleted'); loadVehicles(); } catch (e) { showToast(e.message, false); }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  REASONS
+// ═══════════════════════════════════════════════════════════════════
+async function loadReasons() {
+  $('reasonTable').innerHTML = '<div class="loader"><div class="spinner-border text-primary"></div></div>';
+  try {
+    const d = await api('GET', '/reasons');
+    const rows = d.data.map(r => `
+      <tr>
+        <td>${r.id}</td>
+        <td>${r.reason}</td>
+        <td>${statusBadge(r.status)}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-primary me-1" onclick="editReason(${r.id},'${r.reason.replace(/'/g,"\\'")}')"><i class="bi bi-pencil"></i></button>
+          <button class="btn btn-sm btn-outline-danger" onclick="deleteReason(${r.id})"><i class="bi bi-trash"></i></button>
+        </td>
+      </tr>`).join('');
+    $('reasonTable').innerHTML = `<table class="table table-hover"><thead><tr><th>ID</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="text-center text-muted">No reasons</td></tr>'}</tbody></table>`;
+  } catch (e) { $('reasonTable').innerHTML = `<div class="text-danger text-center py-3">${e.message}</div>`; }
+}
+
+function openReasonModal(id = '', text = '') {
+  $('reasonId').value = id;
+  $('reasonText').value = text;
+  $('reasonModalTitle').textContent = id ? 'Edit Reason' : 'Add Reason';
+  bootstrap.Modal.getOrCreateInstance($('reasonModal')).show();
+}
+function editReason(id, text) { openReasonModal(id, text); }
+
+async function saveReason() {
+  const id = $('reasonId').value;
+  const reason = $('reasonText').value;
+  try {
+    if (id) await api('PUT', `/reasons/${id}`, { reason });
+    else     await api('POST', `/reasons`, { reason });
+    bootstrap.Modal.getOrCreateInstance($('reasonModal')).hide();
+    showToast('Saved!'); loadReasons();
+  } catch (e) { showToast(e.message, false); }
+}
+
+async function deleteReason(id) {
+  confirmDelete('Delete this reason?', async () => {
+    try { await api('DELETE', `/reasons/${id}`); showToast('Deleted'); loadReasons(); } catch (e) { showToast(e.message, false); }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ABOUT US
+// ═══════════════════════════════════════════════════════════════════
+async function loadAbout() {
+  try { const d = await api('GET', '/about-us'); $('aboutContent').value = d.data?.content || ''; } catch (e) { showToast(e.message, false); }
+}
+async function saveAbout() {
+  try { await api('PUT', '/about-us', { content: $('aboutContent').value }); showToast('Saved!'); } catch (e) { showToast(e.message, false); }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SETTINGS
+// ═══════════════════════════════════════════════════════════════════
+let settingsData = [];
+async function loadSettings() {
+  $('settingsForm').innerHTML = '<div class="loader"><div class="spinner-border text-primary"></div></div>';
+  $('saveSettingsBtn').classList.add('d-none');
+  try {
+    const d = await api('GET', '/settings');
+    settingsData = d.data;
+    const html = settingsData.map(s => `
+      <div class="mb-3 row align-items-center">
+        <label class="col-sm-4 col-form-label fw-semibold">${s.key}</label>
+        <div class="col-sm-8"><input type="text" class="form-control" data-key="${s.key}" value="${s.value||''}"/></div>
+      </div>`).join('');
+    $('settingsForm').innerHTML = html || '<p class="text-muted">No settings found.</p>';
+    if (settingsData.length) $('saveSettingsBtn').classList.remove('d-none');
+  } catch (e) { $('settingsForm').innerHTML = `<div class="text-danger">${e.message}</div>`; }
+}
+
+async function saveSettings() {
+  const inputs = $('settingsForm').querySelectorAll('input[data-key]');
+  const settings = Array.from(inputs).map(i => ({ key: i.dataset.key, value: i.value }));
+  try { await api('PUT', '/settings', { settings }); showToast('Settings saved!'); } catch (e) { showToast(e.message, false); }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ADMINS
+// ═══════════════════════════════════════════════════════════════════
+async function loadAdmins() {
+  $('adminTable').innerHTML = '<div class="loader"><div class="spinner-border text-primary"></div></div>';
+  try {
+    const d = await api('GET', '/admins');
+    const rows = d.data.map(a => `
+      <tr>
+        <td>${a.id}</td>
+        <td>${a.name}</td>
+        <td>${a.username||'-'}</td>
+        <td>${a.email}</td>
+        <td>${statusBadge(a.status)}</td>
+        <td>${new Date(a.created_at).toLocaleDateString()}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-primary me-1" onclick="editAdmin(${a.id},'${a.name}','${a.username||''}','${a.email}',${a.status})"><i class="bi bi-pencil"></i></button>
+          <button class="btn btn-sm btn-outline-danger" onclick="deleteAdmin(${a.id})"><i class="bi bi-trash"></i></button>
+        </td>
+      </tr>`).join('');
+    $('adminTable').innerHTML = `<table class="table table-hover"><thead><tr><th>ID</th><th>Name</th><th>Username</th><th>Email</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody>${rows||'<tr><td colspan="7" class="text-center text-muted">No admins</td></tr>'}</tbody></table>`;
+  } catch (e) { $('adminTable').innerHTML = `<div class="text-danger text-center py-3">${e.message}</div>`; }
+}
+
+function openAdminModal() {
+  ['adminId','adminName','adminUsername','adminEmail','adminPassword'].forEach(id => $(id).value = '');
+  $('adminStatus').value = '1';
+  $('adminModalTitle').textContent = 'Add Admin';
+  bootstrap.Modal.getOrCreateInstance($('adminModal')).show();
+}
+
+function editAdmin(id, name, username, email, status) {
+  $('adminId').value = id; $('adminName').value = name;
+  $('adminUsername').value = username; $('adminEmail').value = email;
+  $('adminPassword').value = ''; $('adminStatus').value = status;
+  $('adminModalTitle').textContent = 'Edit Admin';
+  bootstrap.Modal.getOrCreateInstance($('adminModal')).show();
+}
+
+async function saveAdmin() {
+  const id = $('adminId').value;
+  const body = { name: $('adminName').value, username: $('adminUsername').value, email: $('adminEmail').value, status: $('adminStatus').value };
+  const pw = $('adminPassword').value;
+  if (pw) body.password = pw;
+  try {
+    if (id) await api('PUT', `/admins/${id}`, body);
+    else { body.password = pw; await api('POST', `/admins`, body); }
+    bootstrap.Modal.getOrCreateInstance($('adminModal')).hide();
+    showToast('Saved!'); loadAdmins();
+  } catch (e) { showToast(e.message, false); }
+}
+
+async function deleteAdmin(id) {
+  confirmDelete('Delete this admin?', async () => {
+    try { await api('DELETE', `/admins/${id}`); showToast('Admin deleted'); loadAdmins(); } catch (e) { showToast(e.message, false); }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════════
+if (token) { showApp(); loadSection('dashboard'); }
+else showLogin();
+</script>
+</body>
+</html>
