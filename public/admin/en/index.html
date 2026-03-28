@@ -464,11 +464,11 @@ document.addEventListener('click', async function(e) {
   if (btn.classList.contains('btn-toggle-customer')) {
     btn.disabled = true;
     try {
-      await api('POST', `/customers/${id}/toggle-status`);
-      showToast('Customer status updated');
+      const result = await api('POST', `/customers/${id}/toggle-status`);
+      alert('Success: ' + result.message);
       loadCustomers(pag.customers);
     } catch (err) {
-      showToast(err.message, false);
+      alert('Error: ' + err.message);
     }
     btn.disabled = false;
   }
