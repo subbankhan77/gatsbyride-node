@@ -15,6 +15,7 @@ const adminRoutes = require('./routes/admin');
 const setupSocket = require('./socket');
 
 const app = express();
+app.set('trust proxy', 1); // Nginx reverse proxy ke liye
 const server = http.createServer(app);
 
 // ─── Socket.io Setup ──────────────────────────────────────────────────────────
@@ -53,7 +54,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use((req, res, next) => {
   req.io = io;
   next();
-});
+}); 
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/webservice', routes);
