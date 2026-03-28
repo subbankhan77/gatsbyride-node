@@ -21,7 +21,7 @@ exports.login = async (req, res) => {
     if (admin.status === 0) return apiResponse(res, 403, false, 'Account suspended');
 
     const token = jwt.sign(
-      { id: admin.id, role: 'admin', email: admin.email },
+      { id: admin.id, role: 'admin', username: admin.username },
       process.env.JWT_SECRET,
       { expiresIn: '1d' }
     );
@@ -361,12 +361,12 @@ exports.getAdmins = async (req, res) => {
 
 exports.createAdmin = async (req, res) => {
   try {
-    const { name, username, email, password } = req.body;
-    const exists = await AdminUser.findOne({ where: { email } });
-    if (exists) return apiResponse(res, 422, false, 'Email already exists');
+    const { name, username, password } = req.body;
+    const exists = await AdminUser.findOne({ where: { username } });
+    if (exists) return apiResponse(res, 422, false, 'Username already exists');
 
     const hashed = await bcrypt.hash(password, 10);
-    const admin = await AdminUser.create({ name, username, email, password: hashed, status: 1 });
+    const admin = await AdminUser.create({ name, username, password: hashed, status: 1 });
     const { password: _, ...adminData } = admin.toJSON();
     return apiResponse(res, 201, true, 'Admin created', adminData);
   } catch (err) {
@@ -378,8 +378,8 @@ exports.updateAdmin = async (req, res) => {
   try {
     const admin = await AdminUser.findByPk(req.params.id);
     if (!admin) return apiResponse(res, 404, false, 'Admin not found');
-    const { name, username, email, password, status } = req.body;
-    const updateData = { name, username, email, status };
+    const { name, username, password, status } = req.body;
+    const updateData = { name, username, status };
     if (password) updateData.password = await bcrypt.hash(password, 10);
     await admin.update(updateData);
     return apiResponse(res, 200, true, 'Admin updated');

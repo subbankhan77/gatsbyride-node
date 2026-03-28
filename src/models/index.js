@@ -312,7 +312,6 @@ const AdminUser = sequelize.define('AdminUser', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   name: DataTypes.STRING,
   username: DataTypes.STRING,
-  email: DataTypes.STRING,
   password: DataTypes.STRING,
   status: DataTypes.TINYINT,
 }, {
