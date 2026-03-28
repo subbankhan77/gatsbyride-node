@@ -67,6 +67,7 @@ router.post('/customerUpload',
 //  CUSTOMER ROUTES (Authenticated)
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/user_profile',        customerAuth,                                       profileController.getCustomerProfile);
+router.post('/customer/create/profile', customerAuth,                                  profileController.customerCreateProfile);
 router.post('/edit_profile_user',  customerAuth, upload.single('image'),               profileController.updateCustomerProfile);
 router.post('/update-email-user',  customerAuth,                                       profileController.updateCustomerEmail);
 router.post('/update-password-user',customerAuth,                                      profileController.updateCustomerPassword);

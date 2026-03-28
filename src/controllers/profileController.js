@@ -11,6 +11,24 @@ exports.getCustomerProfile = async (req, res) => {
   }
 };
 
+// ─── Customer Create Profile (first_name + last_name → name) ─────────────────
+exports.customerCreateProfile = async (req, res) => {
+  try {
+    const { first_name, last_name, phone, country, latitude, longitude, image } = req.body;
+
+    const updateData = { first_name, last_name, phone, country, latitude, longitude };
+    if (first_name || last_name) {
+      updateData.name = `${first_name || ''} ${last_name || ''}`.trim();
+    }
+    if (image) updateData.image = image;
+
+    await req.user.update(updateData);
+    return apiResponse(res, 200, true, 'Profile updated successfully', req.user);
+  } catch (err) {
+    return apiResponse(res, 500, false, err.message);
+  }
+};
+
 // ─── Update Customer Profile ──────────────────────────────────────────────────
 exports.updateCustomerProfile = async (req, res) => {
   try {
