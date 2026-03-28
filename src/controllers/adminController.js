@@ -10,10 +10,10 @@ const { apiResponse } = require('../utils/helpers');
 // ─── Admin Login ──────────────────────────────────────────────────────────────
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { username, password } = req.body;
 
-    const admin = await AdminUser.findOne({ where: { email } });
-    if (!admin) return apiResponse(res, 422, false, 'Email not found');
+    const admin = await AdminUser.findOne({ where: { username } });
+    if (!admin) return apiResponse(res, 422, false, 'Username not found');
 
     const valid = await bcrypt.compare(password, admin.password);
     if (!valid) return apiResponse(res, 422, false, 'Invalid password');
