@@ -427,6 +427,65 @@ function confirmDelete(msg, cb) {
   if (window.confirm(msg)) cb();
 }
 
+// ═══════════════════════════════════════════════════════════════════
+//  GLOBAL EVENT DELEGATION — sab action buttons ke liye
+// ═══════════════════════════════════════════════════════════════════
+document.addEventListener('click', async function(e) {
+  const btn = e.target.closest('button[data-id]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+
+  // Driver toggle
+  if (btn.classList.contains('btn-toggle-driver')) {
+    btn.disabled = true;
+    try {
+      await api('POST', `/drivers/${id}/toggle-status`);
+      showToast('Driver status updated');
+      loadDrivers(pag.drivers);
+    } catch (err) {
+      showToast(err.message, false);
+    }
+    btn.disabled = false;
+  }
+
+  // Driver delete
+  if (btn.classList.contains('btn-delete-driver')) {
+    if (!window.confirm('Delete this driver?')) return;
+    try {
+      await api('DELETE', `/drivers/${id}`);
+      showToast('Driver deleted');
+      loadDrivers(pag.drivers);
+    } catch (err) {
+      showToast(err.message, false);
+    }
+  }
+
+  // Customer toggle
+  if (btn.classList.contains('btn-toggle-customer')) {
+    btn.disabled = true;
+    try {
+      await api('POST', `/customers/${id}/toggle-status`);
+      showToast('Customer status updated');
+      loadCustomers(pag.customers);
+    } catch (err) {
+      showToast(err.message, false);
+    }
+    btn.disabled = false;
+  }
+
+  // Customer delete
+  if (btn.classList.contains('btn-delete-customer')) {
+    if (!window.confirm('Delete this customer?')) return;
+    try {
+      await api('DELETE', `/customers/${id}`);
+      showToast('Customer deleted');
+      loadCustomers(pag.customers);
+    } catch (err) {
+      showToast(err.message, false);
+    }
+  }
+});
+
 function pagBar(containerId, page, total, onPage) {
   const totalPages = Math.ceil(total / limit);
   const el = $(containerId);
@@ -559,8 +618,8 @@ async function loadCustomers(page = 1) {
         <td>${statusBadge(c.status)}</td>
         <td>${new Date(c.created_at).toLocaleDateString()}</td>
         <td>
-          <button class="btn btn-xs btn-outline-warning btn-sm me-1" onclick="toggleCustomer(${c.id},${c.status})" title="Toggle Status"><i class="bi bi-toggle-on"></i></button>
-          <button class="btn btn-xs btn-outline-danger btn-sm" onclick="deleteCustomer(${c.id})" title="Delete"><i class="bi bi-trash"></i></button>
+          <button class="btn btn-xs btn-outline-warning btn-sm me-1 btn-toggle-customer" data-id="${c.id}" title="Toggle Status"><i class="bi bi-toggle-on"></i></button>
+          <button class="btn btn-xs btn-outline-danger btn-sm btn-delete-customer" data-id="${c.id}" title="Delete"><i class="bi bi-trash"></i></button>
         </td>
       </tr>`).join('');
     $('customerTable').innerHTML = `<table class="table table-hover"><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead><tbody>${rows||'<tr><td colspan="7" class="text-center text-muted">No customers found</td></tr>'}</tbody></table>`;
@@ -605,8 +664,8 @@ async function loadDrivers(page = 1) {
         <td>${statusBadge(dr.status)}</td>
         <td>${dr.verification_status==1?'<span class="status-badge badge-status-active">Verified</span>':'<span class="status-badge badge-status-inactive">Pending</span>'}</td>
         <td>
-          <button class="btn btn-sm btn-outline-warning me-1" onclick="toggleDriver(${dr.id})" title="Toggle"><i class="bi bi-toggle-on"></i></button>
-          <button class="btn btn-sm btn-outline-danger" onclick="deleteDriver(${dr.id})" title="Delete"><i class="bi bi-trash"></i></button>
+          <button class="btn btn-sm btn-outline-warning me-1 btn-toggle-driver" data-id="${dr.id}" title="Toggle"><i class="bi bi-toggle-on"></i></button>
+          <button class="btn btn-sm btn-outline-danger btn-delete-driver" data-id="${dr.id}" title="Delete"><i class="bi bi-trash"></i></button>
         </td>
       </tr>`).join('');
     $('driverTable').innerHTML = `<table class="table table-hover"><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Plate</th><th>Online</th><th>Status</th><th>Verified</th><th>Actions</th></tr></thead><tbody>${rows||'<tr><td colspan="9" class="text-center text-muted">No drivers found</td></tr>'}</tbody></table>`;
