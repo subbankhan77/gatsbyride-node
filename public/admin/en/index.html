@@ -465,7 +465,7 @@ $('loginForm').addEventListener('submit', async e => {
     const d = await r.json();
     if (!d.status) throw new Error(d.message);
     token = d.data.token;
-    currentAdminEmail = d.data.admin.email;
+    currentAdminEmail = d.data.admin.username || d.data.admin.name || 'Admin';
     localStorage.setItem('adminToken', token);
     localStorage.setItem('adminEmail', currentAdminEmail);
     showApp();
@@ -566,7 +566,7 @@ async function loadCustomers(page = 1) {
 }
 
 async function toggleCustomer(id, status) {
-  try { await api('PATCH', `/customers/${id}/toggle-status`); showToast('Status updated'); loadCustomers(pag.customers); } catch (e) { showToast(e.message, false); }
+  try { await api('POST', `/customers/${id}/toggle-status`); showToast('Status updated'); loadCustomers(pag.customers); } catch (e) { showToast(e.message, false); }
 }
 async function deleteCustomer(id) {
   confirmDelete('Delete this customer?', async () => {
@@ -612,7 +612,7 @@ async function loadDrivers(page = 1) {
 }
 
 async function toggleDriver(id) {
-  try { await api('PATCH', `/drivers/${id}/toggle-status`); showToast('Status updated'); loadDrivers(pag.drivers); } catch (e) { showToast(e.message, false); }
+  try { await api('POST', `/drivers/${id}/toggle-status`); showToast('Status updated'); loadDrivers(pag.drivers); } catch (e) { showToast(e.message, false); }
 }
 async function deleteDriver(id) {
   confirmDelete('Delete this driver?', async () => {

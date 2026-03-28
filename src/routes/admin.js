@@ -19,7 +19,7 @@ router.get('/customers', admin.getCustomers);
 router.get('/customers/:id', admin.getCustomer);
 router.put('/customers/:id', admin.updateCustomer);
 router.delete('/customers/:id', admin.deleteCustomer);
-router.patch('/customers/:id/toggle-status', admin.toggleCustomerStatus);
+router.post('/customers/:id/toggle-status', admin.toggleCustomerStatus);
 
 // Drivers
 router.get('/drivers', admin.getDrivers);
@@ -27,7 +27,7 @@ router.get('/drivers/online', admin.getOnlineDrivers);
 router.get('/drivers/:id', admin.getDriver);
 router.put('/drivers/:id', admin.updateDriver);
 router.delete('/drivers/:id', admin.deleteDriver);
-router.patch('/drivers/:id/toggle-status', admin.toggleDriverStatus);
+router.post('/drivers/:id/toggle-status', admin.toggleDriverStatus);
 
 // Orders
 router.get('/orders', admin.getOrders);
