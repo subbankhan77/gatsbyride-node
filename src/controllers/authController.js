@@ -96,7 +96,7 @@ exports.signUpDriver = async (req, res) => {
     const { email, password, firebase_uid, fcm_token } = req.body;
 
     if (!email || !password) {
-      return apiResponse(res, 200, false, 'The email field is required' );
+      return apiResponse(res, 200, false, 'The email field is required');
     }
     if (password.length < 6) {
       return apiResponse(res, 200, false, 'Password must be at least 6 characters');
@@ -109,7 +109,7 @@ exports.signUpDriver = async (req, res) => {
       if (existing.bank_status == 1) {
         return apiResponse(res, 200, false, 'Email already registered');
       }
-      // Onboarding incomplete → return existing token so driver can continue
+      
       const token = generateToken({ id: existing.id, guard: 'driver' });
       await existing.update({ api_token: token });
       return apiResponse(res, 200, true, 'Your account is under review by admin.', {
@@ -130,7 +130,7 @@ exports.signUpDriver = async (req, res) => {
       api_token_expired: tokenExpiry,
       status: 1,
       order_status: 'offline',
-      profile_status: 'step1',
+      profile_status: 1,
     });
 
     const token = generateToken({ id: driver.id, guard: 'driver' });

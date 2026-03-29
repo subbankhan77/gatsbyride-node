@@ -57,7 +57,7 @@ const Driver = sequelize.define('Driver', {
   id_proof: DataTypes.STRING,
   status: { type: DataTypes.TINYINT, defaultValue: 1 },
   order_status: { type: DataTypes.ENUM('offline', 'online'), defaultValue: 'offline' },
-  profile_status: DataTypes.STRING,
+  profile_status: { type: DataTypes.TINYINT, defaultValue: 1 },
   verification_status: DataTypes.TINYINT,
   bank_status: DataTypes.TINYINT,
   vehicle_category_id: DataTypes.INTEGER,
