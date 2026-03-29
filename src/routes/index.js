@@ -35,7 +35,7 @@ router.post('/user_register',  registerLimiter, validateCustomerRegister,   auth
 router.post('/driver_register',registerLimiter, validateDriverRegister,     authController.driverRegister);
 
 // Public data
-router.get('/vehicle/categories',         authController.vehicleCategories);
+router.get('/vehicleCategories',         authController.vehicleCategories);
 router.get('/order/reject/reason/list',   orderController.rejectReasonList);
 router.post('/rating/list',               orderController.getRatingList);
 router.get('/total-price-order',          orderController.getTotalPrice);
