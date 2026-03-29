@@ -90,6 +90,61 @@ exports.customerRegister = async (req, res) => {
   }
 };
 
+// ─── Driver Signup (onboarding resume support) ────────────────────────────────
+exports.signUpDriver = async (req, res) => {
+  try {
+    const { email, password, firebase_uid, fcm_token } = req.body;
+
+    if (!email || !password) {
+      return apiResponse(res, 200, false, 'The email field is required' );
+    }
+    if (password.length < 6) {
+      return apiResponse(res, 200, false, 'Password must be at least 6 characters');
+    }
+
+    const existing = await Driver.findOne({ where: { email } });
+
+    if (existing) {
+      // Bank details complete → email already taken
+      if (existing.bank_status == 1) {
+        return apiResponse(res, 200, false, 'Email already registered');
+      }
+      // Onboarding incomplete → return existing token so driver can continue
+      const token = generateToken({ id: existing.id, guard: 'driver' });
+      await existing.update({ api_token: token });
+      return apiResponse(res, 200, true, 'Your account is under review by admin.', {
+        token,
+        data: { id: existing.id, email: existing.email },
+      });
+    }
+
+    const hashed = await bcrypt.hash(password, 10);
+    const tokenExpiry = new Date();
+    tokenExpiry.setMonth(tokenExpiry.getMonth() + 1);
+
+    const driver = await Driver.create({
+      email,
+      password: hashed,
+      firebase_uid: firebase_uid || '',
+      fcm_token: fcm_token || null,
+      api_token_expired: tokenExpiry,
+      status: 1,
+      order_status: 'offline',
+      profile_status: 'step1',
+    });
+
+    const token = generateToken({ id: driver.id, guard: 'driver' });
+    await driver.update({ api_token: token });
+
+    return apiResponse(res, 200, true, 'Register success', {
+      token,
+      data: { id: driver.id, email: driver.email },
+    });
+  } catch (err) {
+    return apiResponse(res, 500, false, err.message);
+  }
+};
+
 // ─── Driver Register ──────────────────────────────────────────────────────────
 exports.driverRegister = async (req, res) => {
   try {

@@ -33,6 +33,7 @@ router.post('/login',          loginLimiter,    validateLogin,              auth
 router.post('/logindriver',    loginLimiter,    validateLogin,              authController.driverLogin);
 router.post('/user_register',  registerLimiter, validateCustomerRegister,   authController.customerRegister);
 router.post('/driver_register',registerLimiter, validateDriverRegister,     authController.driverRegister);
+router.post('/driver/signup',  registerLimiter,                             authController.signUpDriver);
 
 // Public data
 router.get('/vehicleCategories',         authController.vehicleCategories);
