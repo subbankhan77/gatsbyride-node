@@ -137,7 +137,9 @@ exports.driverLogout = async (req, res) => {
 // ─── Get Vehicle Categories ───────────────────────────────────────────────────
 exports.vehicleCategories = async (req, res) => {
   try {
-    const categories = await VehicleCategory.findAll();
+    const categories = await VehicleCategory.findAll({
+      where:{status:1}
+    });
     return apiResponse(res, 200, true, 'Vehicle categories', categories);
   } catch (err) {
     return apiResponse(res, 500, false, err.message);
