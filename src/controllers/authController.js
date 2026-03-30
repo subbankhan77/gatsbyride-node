@@ -157,7 +157,7 @@ exports.driverRegister = async (req, res) => {
     const driver = await Driver.create({
       name, first_name, last_name, email, password: hashed,
       phone, country, fcm_token, device_type, status: 1,
-      order_status: 'offline', profile_status: 'step1',
+      order_status: 'offline', profile_status: 1,
     });
 
     const token = generateToken({ id: driver.id, guard: 'driver' });

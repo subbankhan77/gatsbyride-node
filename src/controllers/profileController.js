@@ -168,7 +168,7 @@ exports.addDriverProfileDetails = async (req, res) => {
   try {
     const { city, state, country, address, postal_code, dob, id_number } = req.body;
     const files = req.files || {};
-    const updateData = { city, state, country, address, postal_code, dob, id_number, profile_status: 'step2' };
+    const updateData = { city, state, country, address, postal_code, dob, id_number, profile_status: 2 };
 
     if (files.profile_photo) updateData.profile_photo = files.profile_photo[0].filename;
     if (files.id_proof) updateData.id_proof = files.id_proof[0].filename;
@@ -188,7 +188,7 @@ exports.addDriverVehicleDetails = async (req, res) => {
 
     const updateData = {
       vehicle_category_id, plate_number, vehicle_name, car_model, insurance_number,
-      profile_status: 'step3',
+      profile_status: 3,
     };
 
     if (files.driving_licence) updateData.driving_licence = files.driving_licence[0].filename;
@@ -212,7 +212,7 @@ exports.addDriverBankDetails = async (req, res) => {
       transit_number, institution_number, status: 1,
     });
 
-    await req.user.update({ bank_status: 1, profile_status: 'complete' });
+    await req.user.update({ bank_status: 1, profile_status: 4 });
     return apiResponse(res, 201, true, 'Bank details added', bank);
   } catch (err) {
     return apiResponse(res, 500, false, err.message);
