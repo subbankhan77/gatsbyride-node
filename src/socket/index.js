@@ -17,6 +17,7 @@ const lastMysqlSync = new Map();
 const MYSQL_SYNC_INTERVAL = 30000; // 30 seconds
 
 function setupSocket(io) {
+  // ── JWT Auth Middleware ───────────────────────────────────────────────────
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token || socket.handshake.query?.token;
     if (!token) {
@@ -35,7 +36,7 @@ function setupSocket(io) {
   io.on('connection', (socket) => {
     console.log(`Socket connected: ${socket.id} | user: ${socket.userId} | guard: ${socket.userGuard}`);
 
-    // ── Customer: Join personal room ──────────────────────────────────────────
+    // ── Customer: Join personal room ─────────────────────────────────────────
     socket.on('join_customer', (data) => {
       const customerId = data?.customer_id || socket.userId;
       if (customerId) {
@@ -67,7 +68,7 @@ function setupSocket(io) {
           fcm_token: driver.fcm_token,
         });
 
-        // MySQL status update (sirf status, location nahi)
+        // MySQL status update
         await Driver.update({ order_status: 'online' }, { where: { id: driverId } });
       }
 
@@ -75,15 +76,15 @@ function setupSocket(io) {
       console.log(`Driver ${driverId} is online`);
     });
 
-    // ── Driver: Location update → Redis Geo (fast) ────────────────────────────
+    // ── Driver: Location update → Redis Geo (fast) ───────────────────────────
     socket.on('driver_location', async (data) => {
       const { driver_id, latitude, longitude, bearing, order_id, vehicle_category_id } = data;
       const driverId = driver_id || socket.userId;
 
-      // Redis update — microseconds, no MySQL hit
+      // Redis update — fast, no MySQL hit
       await updateDriverLocation(driverId, { latitude, longitude, bearing, vehicle_category_id });
 
-      // MySQL sync — sirf har 30 seconds mein (persistence)
+      // MySQL sync — sirf har 30 seconds mein
       const now = Date.now();
       const lastSync = lastMysqlSync.get(driverId) || 0;
       if (now - lastSync >= MYSQL_SYNC_INTERVAL) {
@@ -128,7 +129,7 @@ function setupSocket(io) {
       }
     });
 
-    // ── Join Order Room ───────────────────────────────────────────────────────
+    // ── Join Order Room ──────────────────────────────────────────────────────
     socket.on('join_order', (data) => {
       const { order_id } = data;
       if (order_id) {
@@ -136,7 +137,7 @@ function setupSocket(io) {
       }
     });
 
-    // ── Order Status Update ───────────────────────────────────────────────────
+    // ── Order Status Update ──────────────────────────────────────────────────
     socket.on('order_status_update', async (data) => {
       const { order_id, status, driver_id, customer_id } = data;
 
@@ -147,7 +148,7 @@ function setupSocket(io) {
       io.to(`order_${order_id}`).emit('order_status_update', { order_id, status });
     });
 
-    // ── Driver Accept Order ───────────────────────────────────────────────────
+    // ── Driver Accept Order ──────────────────────────────────────────────────
     socket.on('driver_accept_order', (data) => {
       const { order_id, driver_id, customer_id } = data;
       io.to(`customer_${customer_id}`).emit('driver_accepted', {
@@ -157,7 +158,114 @@ function setupSocket(io) {
       });
     });
 
-    // ── Simple Chat (driver ↔ customer) ───────────────────────────────────────
+    // ── NEW: Customer Books Ride → Online Drivers Ko Notify Karo ─────────────
+    socket.on('UserBookDriver', async (data) => {
+      const {
+        UserID,
+        OrderID,
+        vehicle_category_id,
+        start_coordinate,
+        end_coordinate,
+        start_address,
+        end_address,
+        total,
+        payment_method,
+      } = data;
+
+      console.log(`🚗 UserBookDriver received: OrderID=${OrderID} CustomerID=${UserID} Category=${vehicle_category_id}`);
+
+      try {
+        // Order DB mein verify karo
+        const order = await Order.findByPk(OrderID);
+        if (!order) {
+          console.log(`❌ Order ${OrderID} not found in DB`);
+          socket.emit('noDriverAvailable', { order_id: OrderID, message: 'Order not found' });
+          return;
+        }
+
+        // Customer ko apne rooms mein join karo
+        socket.join(`customer_${UserID}`);
+        socket.join(`order_${OrderID}`);
+        console.log(`Customer ${UserID} joined order_${OrderID} room`);
+
+        // Online drivers check karo (socket room se)
+        const driversRoom = io.sockets.adapter.rooms.get('drivers_online');
+        const socketOnlineCount = driversRoom ? driversRoom.size : 0;
+        console.log(`drivers_online room mein: ${socketOnlineCount} drivers`);
+
+        // Ride request payload
+        const ridePayload = {
+          order_id: OrderID,
+          customer_id: UserID,
+          vehicle_category_id,
+          start_coordinate,
+          end_coordinate,
+          start_address,
+          end_address,
+          total,
+          payment_method,
+        };
+
+        // 1️⃣ Socket se — online drivers ko turant bhejo
+        if (socketOnlineCount > 0) {
+          io.to('drivers_online').emit('newRideRequest', ridePayload);
+          console.log(`✅ newRideRequest socket event sent to ${socketOnlineCount} drivers`);
+        }
+
+        // 2️⃣ FCM se — DB mein online drivers ko (background/killed app ke liye)
+        const dbDrivers = await Driver.findAll({
+          where: {
+            order_status: 'online',
+            vehicle_category_id: vehicle_category_id,
+          },
+          attributes: ['id', 'fcm_token'],
+        });
+
+        console.log(`DB mein online drivers (category ${vehicle_category_id}): ${dbDrivers.length}`);
+
+        let fcmSentCount = 0;
+        for (const driver of dbDrivers) {
+          if (driver.fcm_token) {
+            await sendNotification(
+              driver.fcm_token,
+              '🚗 New Ride Request!',
+              `Pickup: ${start_address || 'New location'}`,
+              {
+                type: 'new_ride',
+                order_id: String(OrderID),
+                customer_id: String(UserID),
+                vehicle_category_id: String(vehicle_category_id),
+                start_address: String(start_address || ''),
+                end_address: String(end_address || ''),
+                total: String(total || ''),
+                payment_method: String(payment_method || ''),
+              }
+            ).catch(err => console.error(`FCM error driver ${driver.id}:`, err.message));
+            fcmSentCount++;
+          }
+        }
+
+        console.log(`✅ FCM sent to ${fcmSentCount} drivers`);
+
+        // Agar koi bhi driver nahi mila
+        if (socketOnlineCount === 0 && dbDrivers.length === 0) {
+          console.log('⚠️ Koi bhi driver available nahi hai');
+          socket.emit('noDriverAvailable', {
+            order_id: OrderID,
+            message: 'No drivers available at the moment',
+          });
+        }
+
+      } catch (err) {
+        console.error('❌ UserBookDriver error:', err.message);
+        socket.emit('noDriverAvailable', {
+          order_id: OrderID,
+          message: 'Server error occurred',
+        });
+      }
+    });
+
+    // ── Simple Chat (driver ↔ customer) ──────────────────────────────────────
     socket.on('send_message', async (data) => {
       const { to_room, message, sender_id, sender_type, receiver_id, order_id } = data;
       const actualSenderId = sender_id || socket.userId;
@@ -173,7 +281,7 @@ function setupSocket(io) {
       // Online users ko deliver karo
       io.to(to_room).emit('receive_message', msgPayload);
 
-      // DB mein save karo (chat history ke liye)
+      // DB mein save karo
       ChatMessage.create({
         order_id: order_id || null,
         sender_id: actualSenderId,
@@ -208,9 +316,9 @@ function setupSocket(io) {
       }
     });
 
-    // ── Disconnect ────────────────────────────────────────────────────────────
+    // ── Disconnect ───────────────────────────────────────────────────────────
     socket.on('disconnect', async () => {
-      console.log(`Socket disconnected: ${socket.id}`);
+      console.log(`Socket disconnected: ${socket.id} | user: ${socket.userId}`);
 
       if (socket.userGuard === 'driver' && socket.userId) {
         const driverId = socket.userId;
@@ -235,6 +343,7 @@ function setupSocket(io) {
         lastMysqlSync.delete(driverId);
 
         io.emit('driver_offline', { driver_id: driverId });
+        console.log(`Driver ${driverId} is now offline`);
       }
     });
   });

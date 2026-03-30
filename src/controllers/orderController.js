@@ -73,13 +73,35 @@ exports.createOrder = async (req, res) => {
       estimated_time: estimatedTime,
     });
 
-    // Redis Geo se already nearby drivers mil gaye — FCM tokens filter karo
-    const notifyDrivers = NOTIFY_RADIUS_KM > 5
+    // Redis Geo se nearby drivers lo
+    let notifyDrivers = NOTIFY_RADIUS_KM > 5
       ? await getNearbyDrivers(customerLat, customerLng, NOTIFY_RADIUS_KM, vehicle_category_id)
       : nearbyDriversGeo;
 
+    // ── MySQL Fallback — Redis empty ho toh MySQL se online drivers lo ──────────
+    if (notifyDrivers.length === 0) {
+      console.log('Redis empty — falling back to MySQL for online drivers');
+      const mysqlDrivers = await Driver.findAll({
+        where: {
+          order_status: 'online',
+          status: 1,
+          verification_status: 1,
+          ...(vehicle_category_id ? { vehicle_category_id } : {}),
+        },
+        attributes: ['id', 'fcm_token', 'Latitude', 'Longitude'],
+      });
+      notifyDrivers = mysqlDrivers.map((d) => ({
+        driver_id: d.id,
+        fcm_token: d.fcm_token,
+        latitude: d.Latitude,
+        longitude: d.Longitude,
+      }));
+    }
+
     const nearbyFcmTokens = notifyDrivers.filter((d) => d.fcm_token).map((d) => d.fcm_token);
     const nearbyDriverIds = notifyDrivers.map((d) => d.driver_id);
+
+    console.log(`Notifying ${notifyDrivers.length} drivers, FCM tokens: ${nearbyFcmTokens.length}`);
 
     // FCM push notification to nearby drivers
     if (nearbyFcmTokens.length > 0) {
