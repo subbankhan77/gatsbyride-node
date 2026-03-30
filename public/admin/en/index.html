@@ -418,8 +418,8 @@ function statusBadge(val) {
 }
 
 function orderStatusLabel(s) {
-  const map = { 0:'Pending',1:'Accepted',2:'Picked Up',3:'On the way',4:'Nearby',5:'Arrived',6:'Started',7:'Completed',8:'Cancelled' };
-  const cls = { 7:'success',8:'danger',0:'warning',1:'primary' };
+  const map = { 0:'Pending',1:'Driver Accepted',2:'Driver On Way',3:'Driver Arrived',5:'Trip Started',6:'Reached Destination',7:'Completed',8:'Cancelled' };
+  const cls = { 0:'warning',1:'primary',2:'info',3:'info',5:'primary',6:'secondary',7:'success',8:'danger' };
   return `<span class="badge bg-${cls[s]||'secondary'}">${map[s]||s}</span>`;
 }
 
