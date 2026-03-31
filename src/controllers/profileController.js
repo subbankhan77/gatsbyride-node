@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const { Customer, Driver, BankDetails } = require('../models');
 const { apiResponse } = require('../utils/helpers');
+const { driverOnline, driverOffline } = require('../utils/driverLocation'); // ✅ Redis fix
 
 // ─── Get Customer Profile ─────────────────────────────────────────────────────
 exports.getCustomerProfile = async (req, res) => {
@@ -140,6 +141,8 @@ exports.updateDriverPassword = async (req, res) => {
 exports.updateDriverCoordinate = async (req, res) => {
   try {
     const { latitude, longitude, bearing } = req.body;
+
+    // MySQL update
     await req.user.update({
       Latitude: latitude,
       Longitude: longitude,
@@ -147,7 +150,16 @@ exports.updateDriverCoordinate = async (req, res) => {
       position: `${latitude},${longitude}`,
     });
 
-    // Emit location to Socket.io (if socket instance attached to req)
+    // ✅ Redis location bhi update karo
+    const { updateDriverLocation } = require('../utils/driverLocation');
+    await updateDriverLocation(req.user.id, {
+      latitude,
+      longitude,
+      bearing: bearing || 0,
+      vehicle_category_id: req.user.vehicle_category_id,
+    });
+
+    // Socket.io emit
     if (req.io) {
       req.io.emit('driver_location_update', {
         driver_id: req.user.id,
@@ -220,13 +232,44 @@ exports.addDriverBankDetails = async (req, res) => {
 };
 
 // ─── Set Driver Status (online/offline) ───────────────────────────────────────
+// ✅ FIX: Ab Redis mein bhi driver online/offline hoga
 exports.setDriverStatus = async (req, res) => {
   try {
-    const { status } = req.body; // 'online' or 'offline'
-    await req.user.update({ order_status: status });
+    const { status, latitude, longitude, bearing } = req.body;
+    const driverId = req.user.id;
+
+    if (status === 'online') {
+      // Validate location
+      if (!latitude || !longitude) {
+        return apiResponse(res, 422, false, 'latitude aur longitude required hain online hone ke liye');
+      }
+
+      // MySQL update
+      await req.user.update({
+        order_status: 'online',
+        Latitude: latitude,
+        Longitude: longitude,
+      });
+
+      // ✅ Redis mein daalo — yahi missing tha!
+      await driverOnline(driverId, {
+        latitude,
+        longitude,
+        bearing: bearing || 0,
+        vehicle_category_id: req.user.vehicle_category_id,
+        fcm_token: req.user.fcm_token,
+      });
+
+    } else {
+      // Offline
+      await req.user.update({ order_status: 'offline' });
+
+      // ✅ Redis se hatao
+      await driverOffline(driverId);
+    }
 
     if (req.io) {
-      req.io.emit('driver_status_change', { driver_id: req.user.id, status });
+      req.io.emit('driver_status_change', { driver_id: driverId, status });
     }
 
     return apiResponse(res, 200, true, 'Status updated', { status });

@@ -67,11 +67,34 @@ app.use('/admin', express.static(path.join(__dirname, '../public/admin')));
 app.get('/admin/en', (req, res) => res.redirect('/admin/en/'));
 app.get('/admin', (req, res) => res.redirect('/admin/en/'));
 
+// ─── Block Suspicious Requests ────────────────────────────────────────────────
+const BLOCKED_PATTERNS = [
+  /\.php$/i,
+  /wp-content/i,
+  /wp-admin/i,
+  /wp-includes/i,
+  /\.env$/i,
+  /\/etc\/passwd/i,
+  /shell/i,
+  /r00t/i,
+  /loadme/i,
+];
+
+app.use((req, res, next) => {
+  const url = req.originalUrl;
+  const isBlocked = BLOCKED_PATTERNS.some((pattern) => pattern.test(url));
+  if (isBlocked) {
+    console.warn(`🚫 Blocked suspicious request: ${req.ip} → ${url}`);
+    return res.status(403).json({ status: false, message: 'Forbidden' });
+  }
+  next();
+});
+
 // Attach io to every request (so controllers can emit events)
 app.use((req, res, next) => {
   req.io = io;
   next();
-}); 
+});
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/webservice', routes);
