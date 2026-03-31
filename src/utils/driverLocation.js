@@ -151,6 +151,16 @@ async function getAllOnlineDrivers() {
   return drivers;
 }
 
+// Driver trip pe gaya — busy mark karo (dispatch skip karega)
+async function setDriverBusy(driverId) {
+  await redis.hset(metaKey(String(driverId)), 'is_available', '1');
+}
+
+// Trip khatam — free mark karo (dispatch mein aayega)
+async function setDriverFree(driverId) {
+  await redis.hset(metaKey(String(driverId)), 'is_available', '0');
+}
+
 module.exports = {
   driverOnline,
   updateDriverLocation,
@@ -158,4 +168,6 @@ module.exports = {
   getNearbyDrivers,
   getDriverLocationFromRedis,
   getAllOnlineDrivers,
+  setDriverBusy,
+  setDriverFree,
 };

@@ -6,8 +6,10 @@ const {
   driverOnline,
   updateDriverLocation,
   driverOffline,
-  getDriverLocationFromRedis,
+  setDriverBusy,
+  setDriverFree,
 } = require('../utils/driverLocation');
+const { stopDispatch } = require('../utils/dispatchQueue');
 
 // ETA throttle — order per 30 seconds
 const lastEtaUpdate = new Map();
@@ -15,6 +17,10 @@ const lastEtaUpdate = new Map();
 // MySQL location sync — every 30s per driver (persistence ke liye)
 const lastMysqlSync = new Map();
 const MYSQL_SYNC_INTERVAL = 30000; // 30 seconds
+
+// Grace period: driver disconnect ke 30s baad offline mark karo
+// Agar 30s mein reconnect kare toh cancel ho jaayega
+const offlineTimers = new Map();
 
 function setupSocket(io) {
   // ── JWT Auth Middleware ───────────────────────────────────────────────────
@@ -49,6 +55,13 @@ function setupSocket(io) {
     socket.on('join_driver', async (data) => {
       const driverId = data?.driver_id || socket.userId;
       if (!driverId) return;
+
+      // Agar pending offline timer hai toh cancel karo (reconnect hua)
+      if (offlineTimers.has(driverId)) {
+        clearTimeout(offlineTimers.get(driverId));
+        offlineTimers.delete(driverId);
+        console.log(`Driver ${driverId} reconnected — offline timer cancelled`);
+      }
 
       socket.join(`driver_${driverId}`);
       socket.join('drivers_online');
@@ -143,125 +156,50 @@ function setupSocket(io) {
 
       await Order.update({ status }, { where: { id: order_id } });
 
+      // Cancel → dispatch band karo + driver free karo
+      if (status == 8) { // ORDER_STATUS.CANCEL
+        stopDispatch(order_id).catch(() => {});
+        if (driver_id) setDriverFree(driver_id).catch(() => {});
+      }
+
       if (customer_id) io.to(`customer_${customer_id}`).emit('order_status_update', { order_id, status });
       if (driver_id) io.to(`driver_${driver_id}`).emit('order_status_update', { order_id, status });
       io.to(`order_${order_id}`).emit('order_status_update', { order_id, status });
     });
 
-    // ── Driver Accept Order ──────────────────────────────────────────────────
-    socket.on('driver_accept_order', (data) => {
+    // ── Driver Accept Order (socket se accept) ───────────────────────────────
+    socket.on('driver_accept_order', async (data) => {
       const { order_id, driver_id, customer_id } = data;
+      const dId = driver_id || socket.userId;
+
+      // Dispatch band karo + driver busy mark karo
+      stopDispatch(order_id).catch(() => {});
+      setDriverBusy(dId).catch(() => {});
+
       io.to(`customer_${customer_id}`).emit('driver_accepted', {
         order_id,
-        driver_id: driver_id || socket.userId,
+        driver_id: dId,
         status: 1,
       });
     });
 
     // ── NEW: Customer Books Ride → Online Drivers Ko Notify Karo ─────────────
+    // ── UserBookDriver — sirf customer ko order room mein join karao ──────────
+    // Dispatch ab createOrder (HTTP) se start hota hai — yahan broadcast nahi hoga
     socket.on('UserBookDriver', async (data) => {
-      const {
-        UserID,
-        OrderID,
-        vehicle_category_id,
-        start_coordinate,
-        end_coordinate,
-        start_address,
-        end_address,
-        total,
-        payment_method,
-      } = data;
-
-      console.log(`🚗 UserBookDriver received: OrderID=${OrderID} CustomerID=${UserID} Category=${vehicle_category_id}`);
-
+      const { UserID, OrderID } = data;
+      console.log(`🚗 UserBookDriver: Customer ${UserID} joining order_${OrderID} room`);
       try {
-        // Order DB mein verify karo
-        const order = await Order.findByPk(OrderID);
+        const order = await Order.findByPk(OrderID, { attributes: ['id', 'customer_id'] });
         if (!order) {
-          console.log(`❌ Order ${OrderID} not found in DB`);
           socket.emit('noDriverAvailable', { order_id: OrderID, message: 'Order not found' });
           return;
         }
-
-        // Customer ko apne rooms mein join karo
         socket.join(`customer_${UserID}`);
         socket.join(`order_${OrderID}`);
         console.log(`Customer ${UserID} joined order_${OrderID} room`);
-
-        // Online drivers check karo (socket room se)
-        const driversRoom = io.sockets.adapter.rooms.get('drivers_online');
-        const socketOnlineCount = driversRoom ? driversRoom.size : 0;
-        console.log(`drivers_online room mein: ${socketOnlineCount} drivers`);
-
-        // Ride request payload
-        const ridePayload = {
-          order_id: OrderID,
-          customer_id: UserID,
-          vehicle_category_id,
-          start_coordinate,
-          end_coordinate,
-          start_address,
-          end_address,
-          total,
-          payment_method,
-        };
-
-        // 1️⃣ Socket se — online drivers ko turant bhejo
-        if (socketOnlineCount > 0) {
-          io.to('drivers_online').emit('newRideRequest', ridePayload);
-          console.log(`✅ newRideRequest socket event sent to ${socketOnlineCount} drivers`);
-        }
-
-        // 2️⃣ FCM se — DB mein online drivers ko (background/killed app ke liye)
-        const dbDrivers = await Driver.findAll({
-          where: {
-            order_status: 'online',
-            vehicle_category_id: vehicle_category_id,
-          },
-          attributes: ['id', 'fcm_token'],
-        });
-
-        console.log(`DB mein online drivers (category ${vehicle_category_id}): ${dbDrivers.length}`);
-
-        let fcmSentCount = 0;
-        for (const driver of dbDrivers) {
-          if (driver.fcm_token) {
-            await sendNotification(
-              driver.fcm_token,
-              '🚗 New Ride Request!',
-              `Pickup: ${start_address || 'New location'}`,
-              {
-                type: 'new_ride',
-                order_id: String(OrderID),
-                customer_id: String(UserID),
-                vehicle_category_id: String(vehicle_category_id),
-                start_address: String(start_address || ''),
-                end_address: String(end_address || ''),
-                total: String(total || ''),
-                payment_method: String(payment_method || ''),
-              }
-            ).catch(err => console.error(`FCM error driver ${driver.id}:`, err.message));
-            fcmSentCount++;
-          }
-        }
-
-        console.log(`✅ FCM sent to ${fcmSentCount} drivers`);
-
-        // Agar koi bhi driver nahi mila
-        if (socketOnlineCount === 0 && dbDrivers.length === 0) {
-          console.log('⚠️ Koi bhi driver available nahi hai');
-          socket.emit('noDriverAvailable', {
-            order_id: OrderID,
-            message: 'No drivers available at the moment',
-          });
-        }
-
       } catch (err) {
         console.error('❌ UserBookDriver error:', err.message);
-        socket.emit('noDriverAvailable', {
-          order_id: OrderID,
-          message: 'Server error occurred',
-        });
       }
     });
 
@@ -323,27 +261,25 @@ function setupSocket(io) {
       if (socket.userGuard === 'driver' && socket.userId) {
         const driverId = socket.userId;
 
-        // Final MySQL location sync before going offline
-        try {
-          const loc = await getDriverLocationFromRedis(driverId);
-          if (loc) {
-            await Driver.update(
-              { Latitude: loc.latitude, Longitude: loc.longitude, order_status: 'offline' },
-              { where: { id: driverId } }
-            );
-          } else {
-            await Driver.update({ order_status: 'offline' }, { where: { id: driverId } });
-          }
-        } catch (e) {
-          console.error('Disconnect sync error:', e.message);
-        }
-
-        // Redis se hata do
+        // Redis se foran hata do (location stale ho jaayegi)
         await driverOffline(driverId).catch(() => {});
         lastMysqlSync.delete(driverId);
-
         io.emit('driver_offline', { driver_id: driverId });
-        console.log(`Driver ${driverId} is now offline`);
+        console.log(`Driver ${driverId} disconnected — waiting 30s before marking offline`);
+
+        // MySQL mein 30s grace period ke baad offline karo
+        // Agar driver 30s mein reconnect kare toh join_driver timer cancel karega
+        const timer = setTimeout(async () => {
+          offlineTimers.delete(driverId);
+          try {
+            await Driver.update({ order_status: 'offline' }, { where: { id: driverId } });
+            console.log(`Driver ${driverId} is now offline (grace period expired)`);
+          } catch (e) {
+            console.error('Offline sync error:', e.message);
+          }
+        }, 30000);
+
+        offlineTimers.set(driverId, timer);
       }
     });
   });

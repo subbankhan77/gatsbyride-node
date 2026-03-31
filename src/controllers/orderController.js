@@ -3,12 +3,13 @@ const {
   Order, Driver, Customer, VehicleCategory, Rating,
   OrderReject, Reason, ChatMessage,
 } = require('../models');
-const { sendNotification, sendMulticastNotification } = require('../utils/fcm');
+const { sendNotification } = require('../utils/fcm');
 const {
   haversineDistance, getDrivingDistance, getRoutePolyline,
   calculateFare, getSurgeMultiplier, checkPeakHour, apiResponse,
 } = require('../utils/helpers');
-const { getNearbyDrivers, getAllOnlineDrivers, getDriverLocationFromRedis } = require('../utils/driverLocation');
+const { getNearbyDrivers, getAllOnlineDrivers, getDriverLocationFromRedis, setDriverBusy, setDriverFree } = require('../utils/driverLocation');
+const { startDispatch, dispatchNext, stopDispatch } = require('../utils/dispatchQueue');
 const { ORDER_STATUS } = require('../config/constants');
 require('dotenv').config();
 
@@ -73,14 +74,13 @@ exports.createOrder = async (req, res) => {
       estimated_time: estimatedTime,
     });
 
-    // Redis Geo se nearby drivers lo
-    let notifyDrivers = NOTIFY_RADIUS_KM > 5
-      ? await getNearbyDrivers(customerLat, customerLng, NOTIFY_RADIUS_KM, vehicle_category_id)
-      : nearbyDriversGeo;
+    // ── Sequential Dispatch — nearest driver pehle, phir next ────────────────
+    // Redis Geo se nearby drivers lo (distance ke order mein — closest first)
+    let dispatchDrivers = await getNearbyDrivers(customerLat, customerLng, NOTIFY_RADIUS_KM, vehicle_category_id);
 
-    // ── MySQL Fallback — Redis empty ho toh MySQL se online drivers lo ──────────
-    if (notifyDrivers.length === 0) {
-      console.log('Redis empty — falling back to MySQL for online drivers');
+    // MySQL Fallback — Redis empty ho toh MySQL se lo
+    if (dispatchDrivers.length === 0) {
+      console.log('Redis empty — falling back to MySQL for dispatch');
       const mysqlDrivers = await Driver.findAll({
         where: {
           order_status: 'online',
@@ -90,52 +90,25 @@ exports.createOrder = async (req, res) => {
         },
         attributes: ['id', 'fcm_token', 'Latitude', 'Longitude'],
       });
-      notifyDrivers = mysqlDrivers.map((d) => ({
-        driver_id: d.id,
-        fcm_token: d.fcm_token,
-        latitude: d.Latitude,
-        longitude: d.Longitude,
-      }));
+      dispatchDrivers = mysqlDrivers
+        .map((d) => ({
+          driver_id: d.id,
+          fcm_token: d.fcm_token,
+          latitude: d.Latitude,
+          longitude: d.Longitude,
+          distance_km: (d.Latitude && d.Longitude)
+            ? haversineDistance(customerLat, customerLng, parseFloat(d.Latitude), parseFloat(d.Longitude))
+            : null,
+        }))
+        .sort((a, b) => (a.distance_km ?? Infinity) - (b.distance_km ?? Infinity));
     }
 
-    const nearbyFcmTokens = notifyDrivers.filter((d) => d.fcm_token).map((d) => d.fcm_token);
-    const nearbyDriverIds = notifyDrivers.map((d) => d.driver_id);
+    console.log(`🚀 Starting dispatch for order ${order.id} — ${dispatchDrivers.length} drivers in queue`);
 
-    console.log(`Notifying ${notifyDrivers.length} drivers, FCM tokens: ${nearbyFcmTokens.length}`);
-
-    // FCM push notification to nearby drivers
-    if (nearbyFcmTokens.length > 0) {
-      await sendMulticastNotification(
-        nearbyFcmTokens,
-        'New Ride Request',
-        `Pickup: ${start_address}`,
-        {
-          order_id: String(order.id),
-          type: 'new_order',
-          start_address,
-          end_address,
-        }
-      );
-    }
-
-    // Socket.io emit to nearby drivers (includes surge + polyline info)
-    if (req.io) {
-      req.io.to('drivers_online').emit('new_order', {
-        order_id: order.id,
-        start_address,
-        end_address,
-        start_coordinate,
-        end_coordinate,
-        total,
-        surge_multiplier: surgeMultiplier,
-        route_polyline: routePolyline,
-        estimated_time: estimatedTime,
-        payment_method,
-        vehicle_category_id,
-        customer_id: req.user.id,
-        nearby_driver_ids: nearbyDriverIds,
-      });
-    }
+    // Dispatch shuru karo (async — response wait nahi karega)
+    startDispatch(order.id, dispatchDrivers, req.io).catch((err) =>
+      console.error('Dispatch error:', err.message)
+    );
 
     return apiResponse(res, 201, true, 'Order created', order);
   } catch (err) {
@@ -156,6 +129,15 @@ exports.updateOrderStatus = async (req, res) => {
     });
 
     if (!order) return apiResponse(res, 404, false, 'Order not found');
+
+    // Customer cancel → dispatch band karo
+    if (status == ORDER_STATUS.CANCEL) {
+      stopDispatch(order_id).catch(() => {});
+      // Agar driver trip pe tha toh use free karo
+      if (order.driver_id) {
+        setDriverFree(order.driver_id).catch(() => {});
+      }
+    }
 
     await order.update({ status });
 
@@ -287,12 +269,15 @@ exports.driverUpdateOrderStatus = async (req, res) => {
     if (status == ORDER_STATUS.DRIVER_ACCEPT) {
       updateData.start_time = new Date();
       await Driver.update({ is_available: 1 }, { where: { id: req.user.id } });
+      setDriverBusy(req.user.id).catch(() => {});
+      stopDispatch(order_id).catch(() => {}); // dispatch band karo
     }
     if (status == ORDER_STATUS.COMPLETE || status == ORDER_STATUS.CANCEL) {
       updateData.end_time = new Date();
       if (actual_distance) updateData.actual_distance = actual_distance;
       if (actual_time) updateData.actual_time = actual_time;
       await Driver.update({ is_available: 0 }, { where: { id: req.user.id } });
+      setDriverFree(req.user.id).catch(() => {}); // naye orders ke liye available
     }
 
     await order.update(updateData);
@@ -337,10 +322,10 @@ exports.driverRejectOrder = async (req, res) => {
       status: 1,
     });
 
-    // Notify via socket
-    if (req.io) {
-      req.io.emit(`order_rejected_${order_id}`, { order_id, driver_id: req.user.id });
-    }
+    // Dispatch queue mein next driver ko bhejo
+    dispatchNext(order_id, req.io).catch((err) =>
+      console.error('dispatchNext error:', err.message)
+    );
 
     return apiResponse(res, 200, true, 'Order rejected');
   } catch (err) {
@@ -488,6 +473,7 @@ exports.updateEndTrip = async (req, res) => {
     });
 
     await Driver.update({ is_available: 0 }, { where: { id: req.user.id } });
+    setDriverFree(req.user.id).catch(() => {}); // naye orders ke liye available
 
     if (req.io) {
       req.io.to(`customer_${order.customer_id}`).emit('trip_completed', { order_id, grand_total: newTotal });
@@ -583,6 +569,10 @@ exports.driverAcceptOrder = async (req, res) => {
     }
 
     await Driver.update({ is_available: 1 }, { where: { id: req.user.id } });
+    setDriverBusy(req.user.id).catch(() => {}); // Redis mein busy mark karo
+
+    // Dispatch queue band karo — aur koi driver ko request mat bhejo
+    await stopDispatch(order_id);
 
     // Customer details fetch karo notification ke liye
     const order = await Order.findByPk(order_id, { include: [{ model: Customer }] });

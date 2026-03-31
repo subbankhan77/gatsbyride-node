@@ -1,13 +1,13 @@
 // Order Status
 const ORDER_STATUS = {
-  IS_PENDING: 0,               // Order created, waiting for driver
-  IS_DRIVER_ACCEPT: 1,         // Driver accepted the order
-  IS_DEPARTURE_TO_CUSTOMER: 2, // Driver on the way to pickup
-  IS_ARRIVAL_AT_CUSTOMER: 3,   // Driver arrived at pickup
-  IS_DEPARTURE_TO_DESTINATION: 5, // Trip started
-  IS_ARRIVAL_AT_DESTINATION: 6,   // Reached destination
-  IS_COMPLETE: 7,              // Trip completed
-  IS_CANCEL: 8,                // Order cancelled
+  PENDING: 0,               // Order created, waiting for driver
+  DRIVER_ACCEPT: 1,         // Driver accepted the order
+  DEPARTURE_TO_CUSTOMER: 2, // Driver on the way to pickup
+  ARRIVAL_AT_CUSTOMER: 3,   // Driver arrived at pickup
+  DEPARTURE_TO_DESTINATION: 5, // Trip started
+  ARRIVAL_AT_DESTINATION: 6,   // Reached destination
+  COMPLETE: 7,              // Trip completed
+  CANCEL: 8,                // Order cancelled
 };
 
 // User Status

@@ -13,6 +13,8 @@ const { createPubSubClients } = require('./config/redis');
 const routes = require('./routes');
 const adminRoutes = require('./routes/admin');
 const setupSocket = require('./socket');
+const { driverOnline } = require('./utils/driverLocation');
+const { Driver } = require('./models');
 
 const app = express();
 app.set('trust proxy', 1); // Nginx reverse proxy ke liye
@@ -121,9 +123,31 @@ sequelize
   .authenticate()
   .then(() => {
     console.log('✅ Database connected successfully');
-    server.listen(PORT, () => {
+    server.listen(PORT, async () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`🔌 Socket.io ready`);
+
+      // Server restart ke baad MySQL se online drivers ko Redis mein repopulate karo
+      try {
+        const onlineDrivers = await Driver.findAll({
+          where: { order_status: 'online', status: 1 },
+          attributes: ['id', 'Latitude', 'Longitude', 'bearing', 'vehicle_category_id', 'fcm_token'],
+        });
+        if (onlineDrivers.length > 0) {
+          await Promise.all(onlineDrivers.map((d) =>
+            driverOnline(d.id, {
+              latitude: d.Latitude || 0,
+              longitude: d.Longitude || 0,
+              bearing: d.bearing || 0,
+              vehicle_category_id: d.vehicle_category_id,
+              fcm_token: d.fcm_token,
+            })
+          ));
+          console.log(`✅ Redis repopulated with ${onlineDrivers.length} online drivers`);
+        }
+      } catch (err) {
+        console.error('❌ Redis repopulate error:', err.message);
+      }
     });
   })
   .catch((err) => {
