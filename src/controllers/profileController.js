@@ -238,7 +238,12 @@ exports.setDriverStatus = async (req, res) => {
     const { status, latitude, longitude, bearing } = req.body;
     const driverId = req.user.id;
 
-    if (status === 'online') {
+    // App string ('online') ya integer (1) dono bhej sakta hai
+    const isOnline = status === 'online' || status === 1 || status === '1';
+
+    console.log(`Driver ${driverId} set-status: received="${status}" isOnline=${isOnline} lat=${latitude} lng=${longitude}`);
+
+    if (isOnline) {
       // Validate location
       if (!latitude || !longitude) {
         return apiResponse(res, 422, false, 'latitude aur longitude required hain online hone ke liye');
@@ -261,10 +266,8 @@ exports.setDriverStatus = async (req, res) => {
       });
 
     } else {
-      // Offline
+      // Offline (status === 'offline' || status === 0 || status === '0')
       await req.user.update({ order_status: 'offline' });
-
-      // ✅ Redis se hatao
       await driverOffline(driverId);
     }
 
