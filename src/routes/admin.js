@@ -3,13 +3,17 @@ const router = express.Router();
 const verifyAdmin = require('../middleware/adminAuth');
 const upload = require('../utils/upload');
 const admin = require('../controllers/adminController');
-const { loginLimiter } = require('../middleware/rateLimiter');
+const { loginLimiter, apiLimiter } = require('../middleware/rateLimiter');
 
 // ─── Public ───────────────────────────────────────────────────────────────────
 router.post('/login', loginLimiter, admin.login);
 
 // ─── All routes below require admin JWT ──────────────────────────────────────
 router.use(verifyAdmin);
+router.use(apiLimiter);
+
+// Logout
+router.post('/logout', admin.logout);
 
 // Dashboard
 router.get('/dashboard', admin.dashboard);

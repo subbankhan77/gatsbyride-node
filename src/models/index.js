@@ -314,6 +314,7 @@ const AdminUser = sequelize.define('AdminUser', {
   username: DataTypes.STRING,
   password: DataTypes.STRING,
   status: DataTypes.TINYINT,
+  remember_token: DataTypes.TEXT,
 }, {
   tableName: 'users',
   timestamps: true,

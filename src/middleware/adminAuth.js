@@ -26,6 +26,10 @@ const verifyAdmin = async (req, res, next) => {
     if (!admin) return res.status(401).json({ status: false, message: 'Admin not found' });
     if (admin.status === 0) return res.status(403).json({ status: false, message: 'Admin account suspended' });
 
+    if (admin.remember_token && admin.remember_token !== token) {
+      return res.status(401).json({ status: false, message: 'Invalid or expired admin token' });
+    }
+
     req.admin = admin;
     next();
   } catch (err) {

@@ -26,7 +26,10 @@ exports.login = async (req, res) => {
       { expiresIn: '1d' }
     );
 
-    return apiResponse(res, 200, true, 'Login successful', { token, admin });
+    await admin.update({ remember_token: token });
+
+    const { password: _, remember_token: __, ...adminData } = admin.toJSON();
+    return apiResponse(res, 200, true, 'Login successful', { token, admin: adminData });
   } catch (err) {
     return apiResponse(res, 500, false, err.message);
   }
@@ -502,6 +505,16 @@ exports.updateSettings = async (req, res) => {
       await OrderSetting.upsert({ key: s.key, value: s.value });
     }
     return apiResponse(res, 200, true, 'Settings updated');
+  } catch (err) {
+    return apiResponse(res, 500, false, err.message);
+  }
+};
+
+// ─── Admin Logout ─────────────────────────────────────────────────────────────
+exports.logout = async (req, res) => {
+  try {
+    await req.admin.update({ remember_token: null });
+    return apiResponse(res, 200, true, 'Logged out successfully');
   } catch (err) {
     return apiResponse(res, 500, false, err.message);
   }
