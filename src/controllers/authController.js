@@ -58,6 +58,10 @@ exports.driverLogin = async (req, res) => {
 
     if (driver.status === 0) return apiResponse(res, 403, false, 'Your account is suspended');
 
+    if (driver.verification_status !== 1) {
+      return apiResponse(res, 403, false, 'Your account is under review. Please wait for admin approval.');
+    }
+
     const token = generateToken({ id: driver.id, guard: 'driver' });
     await driver.update({ api_token: token, fcm_token, device_type });
 
