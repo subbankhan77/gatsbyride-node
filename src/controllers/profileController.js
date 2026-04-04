@@ -119,7 +119,14 @@ exports.updateDriverPassword = async (req, res) => {
 
 exports.updateDriverCoordinate = async (req, res) => {
   try {
-    const { latitude, longitude, bearing } = req.body;
+    const { bearing } = req.body;
+    const latitude = parseFloat(req.body.latitude);
+    const longitude = parseFloat(req.body.longitude);
+
+    if (isNaN(latitude) || isNaN(longitude)) {
+      return apiResponse(res, 422, false, 'Valid latitude and longitude are required');
+    }
+
     await req.user.update({
       Latitude: latitude,
       Longitude: longitude,
@@ -194,7 +201,11 @@ exports.addDriverBankDetails = async (req, res) => {
 exports.setDriverStatus = async (req, res) => {
   try {
     const { status, bearing } = req.body;
-    let { latitude, longitude } = req.body;
+
+    console.log("setDriverStatus setDriverStatussetDriverStatus ==>>>", req.body);
+    
+    let latitude = req.body.latitude ?? req.body.lat;
+    let longitude = req.body.longitude ?? req.body.lng ?? req.body.lon;
     const driverId = req.user.id;
 
     const isOnline = status === 'online' || status === 1 || status === '1';
