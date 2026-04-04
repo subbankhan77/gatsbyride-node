@@ -94,8 +94,19 @@ function setupSocket(io) {
       const { driver_id, latitude, longitude, bearing, order_id, vehicle_category_id } = data;
       const driverId = driver_id || socket.userId;
 
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+      if (isNaN(lat) || isNaN(lng)) {
+        console.warn(`[driver_location] Invalid lat/lng from driver ${driverId}: lat=${latitude} lng=${longitude}`);
+        return;
+      }
+
       // Redis update — fast, no MySQL hit
-      await updateDriverLocation(driverId, { latitude, longitude, bearing, vehicle_category_id });
+      try {
+        await updateDriverLocation(driverId, { latitude: lat, longitude: lng, bearing, vehicle_category_id });
+      } catch (redisErr) {
+        console.error(`[driver_location] Redis error for driver ${driverId}:`, redisErr.message);
+      }
 
       // MySQL sync — sirf har 30 seconds mein
       const now = Date.now();
@@ -103,7 +114,7 @@ function setupSocket(io) {
       if (now - lastSync >= MYSQL_SYNC_INTERVAL) {
         lastMysqlSync.set(driverId, now);
         Driver.update(
-          { Latitude: latitude, Longitude: longitude, bearing, position: `${latitude},${longitude}` },
+          { Latitude: lat, Longitude: lng, bearing, position: `${lat},${lng}` },
           { where: { id: driverId } }
         ).catch((err) => console.error('MySQL location sync error:', err.message));
       }
