@@ -197,7 +197,6 @@ exports.addDriverBankDetails = async (req, res) => {
   }
 };
 
-// ✅ FIX: Agar app se lat/lng na aaye toh DB se le lo
 exports.setDriverStatus = async (req, res) => {
   try {
     const { status, bearing } = req.body;

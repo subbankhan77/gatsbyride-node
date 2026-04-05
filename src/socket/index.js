@@ -53,40 +53,71 @@ function setupSocket(io) {
 
     // ── Driver: Join personal room + Redis Geo online ─────────────────────────
     socket.on('join_driver', async (data) => {
-      const driverId = data?.driver_id || socket.userId;
-      if (!driverId) return;
+      try {
+        const driverId = data?.driver_id || socket.userId;
+        if (!driverId) return;
 
-      // Agar pending offline timer hai toh cancel karo (reconnect hua)
-      if (offlineTimers.has(driverId)) {
-        clearTimeout(offlineTimers.get(driverId));
-        offlineTimers.delete(driverId);
-        console.log(`Driver ${driverId} reconnected — offline timer cancelled`);
-      }
+        // Agar pending offline timer hai toh cancel karo (reconnect hua)
+        const driverIdStr = String(driverId);
+        if (offlineTimers.has(driverIdStr)) {
+          clearTimeout(offlineTimers.get(driverIdStr));
+          offlineTimers.delete(driverIdStr);
+          console.log(`Driver ${driverId} reconnected — offline timer cancelled`);
+        }
 
-      socket.join(`driver_${driverId}`);
-      socket.join('drivers_online');
-      socket.driverId = driverId; // disconnect ke liye save karo
+        socket.join(`driver_${driverId}`);
+        socket.join('drivers_online');
+        socket.driverId = driverId; // disconnect ke liye save karo
 
-      // Driver ka vehicle_category aur fcm_token MySQL se ek baar lo
-      const driver = await Driver.findByPk(driverId, {
-        attributes: ['id', 'vehicle_category_id', 'fcm_token', 'Latitude', 'Longitude'],
-      });
+        // Client se lat/lng aaye toh use karo, warna DB ki stored value lo
+        const clientLat = data?.latitude ? parseFloat(data.latitude) : null;
+        const clientLng = data?.longitude ? parseFloat(data.longitude) : null;
+        const clientBearing = data?.bearing ? parseFloat(data.bearing) : null;
 
-      if (driver) {
-        // Redis Geo mein daalo
-        await driverOnline(driverId, {
-          latitude: driver.Latitude || 0,
-          longitude: driver.Longitude || 0,
-          vehicle_category_id: driver.vehicle_category_id,
-          fcm_token: driver.fcm_token,
+        // Driver ka vehicle_category aur fcm_token MySQL se ek baar lo
+        const driver = await Driver.findByPk(driverId, {
+          attributes: ['id', 'vehicle_category_id', 'fcm_token', 'Latitude', 'Longitude'],
         });
 
-        // MySQL status update
-        await Driver.update({ order_status: 'online' }, { where: { id: driverId } });
-      }
+        if (!driver) {
+          console.warn(`join_driver: Driver ${driverId} not found in DB`);
+          return;
+        }
 
-      socket.broadcast.emit('driver_online', { driver_id: driverId });
-      console.log(`Driver ${driverId} is online`);
+        const lat = clientLat !== null ? clientLat : (parseFloat(driver.Latitude) || 0);
+        const lng = clientLng !== null ? clientLng : (parseFloat(driver.Longitude) || 0);
+
+        // MySQL update — order_status online + lat/lng (agar client ne bheja)
+        const mysqlUpdate = { order_status: 'online' };
+        if (clientLat !== null && clientLng !== null && !isNaN(clientLat) && !isNaN(clientLng)) {
+          mysqlUpdate.Latitude = clientLat;
+          mysqlUpdate.Longitude = clientLng;
+          mysqlUpdate.position = `${clientLat},${clientLng}`;
+          if (clientBearing !== null && !isNaN(clientBearing)) {
+            mysqlUpdate.bearing = clientBearing;
+          }
+        }
+
+        // MySQL aur Redis dono parallel mein — ek ke fail hone se doosra na ruke
+        await Promise.allSettled([
+          Driver.update(mysqlUpdate, { where: { id: driverId } }),
+          driverOnline(driverId, {
+            latitude: lat,
+            longitude: lng,
+            bearing: clientBearing ?? 0,
+            vehicle_category_id: driver.vehicle_category_id,
+            fcm_token: driver.fcm_token,
+          }),
+        ]).then((results) => {
+          if (results[0].status === 'rejected') console.error(`join_driver MySQL error driver ${driverId}:`, results[0].reason?.message);
+          if (results[1].status === 'rejected') console.error(`join_driver Redis error driver ${driverId}:`, results[1].reason?.message);
+        });
+
+        socket.broadcast.emit('driver_online', { driver_id: driverId });
+        console.log(`Driver ${driverId} is online (lat=${lat}, lng=${lng})`);
+      } catch (err) {
+        console.error(`join_driver unhandled error:`, err.message);
+      }
     });
 
     // ── Driver: Location update → Redis Geo (fast) ───────────────────────────
