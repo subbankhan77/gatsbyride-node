@@ -212,31 +212,37 @@ exports.setDriverStatus = async (req, res) => {
     console.log(`Driver ${driverId} set-status: received="${status}" isOnline=${isOnline} lat=${latitude} lng=${longitude}`);
 
     if (isOnline) {
-      // ✅ Agar lat/lng app se nahi aaya toh DB ki last known location use karo
+      // Agar lat/lng app se nahi aaya toh DB ki last known location use karo
       if (!latitude || !longitude) {
         latitude = req.user.Latitude;
         longitude = req.user.Longitude;
         console.log(`Driver ${driverId} — lat/lng missing from app, using DB fallback: lat=${latitude} lng=${longitude}`);
       }
 
-      // Agar DB mein bhi nahi hai toh error
-      if (!latitude || !longitude) {
-        return apiResponse(res, 422, false, 'Location not available. Please enable GPS and try again.');
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+      const hasLocation = !isNaN(lat) && !isNaN(lng);
+
+      const updateData = { order_status: 'online' };
+      if (hasLocation) {
+        updateData.Latitude = lat;
+        updateData.Longitude = lng;
+        updateData.position = `${lat},${lng}`;
       }
 
-      await req.user.update({
-        order_status: 'online',
-        Latitude: latitude,
-        Longitude: longitude,
-      });
+      await req.user.update(updateData);
 
-      await driverOnline(driverId, {
-        latitude,
-        longitude,
-        bearing: bearing || 0,
-        vehicle_category_id: req.user.vehicle_category_id,
-        fcm_token: req.user.fcm_token,
-      });
+      if (hasLocation) {
+        await driverOnline(driverId, {
+          latitude: lat,
+          longitude: lng,
+          bearing: bearing || 0,
+          vehicle_category_id: req.user.vehicle_category_id,
+          fcm_token: req.user.fcm_token,
+        });
+      } else {
+        console.log(`Driver ${driverId} — online without location (GPS pending)`);
+      }
 
     } else {
       await req.user.update({ order_status: 'offline' });
