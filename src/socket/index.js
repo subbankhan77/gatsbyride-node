@@ -10,6 +10,7 @@ const {
   setDriverFree,
 } = require('../utils/driverLocation');
 const { stopDispatch } = require('../utils/dispatchQueue');
+const { redis } = require('../config/redis');
 
 // ETA throttle — order per 30 seconds
 const lastEtaUpdate = new Map();
@@ -68,6 +69,9 @@ function setupSocket(io) {
         socket.join(`driver_${driverId}`);
         socket.join('drivers_online');
         socket.driverId = driverId; // disconnect ke liye save karo
+
+        // Redis mein reconnect flag set karo (cross-process timer cancel ke liye)
+        await redis.set(`driver:connected:${driverIdStr}`, '1', 'EX', 120);
 
         // Client se lat/lng aaye toh use karo, warna DB ki stored value lo
         const clientLat = data?.latitude ? parseFloat(data.latitude) : null;
@@ -311,8 +315,18 @@ function setupSocket(io) {
 
         // MySQL mein 30s grace period ke baad offline karo
         // Agar driver 30s mein reconnect kare toh join_driver timer cancel karega
+        const driverIdStr = String(driverId);
+        // Redis flag clear karo — driver abhi disconnect hua
+        await redis.del(`driver:connected:${driverIdStr}`).catch(() => {});
+
         const timer = setTimeout(async () => {
-          offlineTimers.delete(driverId);
+          offlineTimers.delete(driverIdStr);
+          // Redis mein check karo — kisi bhi process mein reconnect hua kya?
+          const isReconnected = await redis.get(`driver:connected:${driverIdStr}`).catch(() => null);
+          if (isReconnected) {
+            console.log(`Driver ${driverId} already reconnected (Redis flag) — skip offline mark`);
+            return;
+          }
           try {
             await Driver.update({ order_status: 'offline' }, { where: { id: driverId } });
             console.log(`Driver ${driverId} is now offline (grace period expired)`);
@@ -321,7 +335,7 @@ function setupSocket(io) {
           }
         }, 30000);
 
-        offlineTimers.set(driverId, timer);
+        offlineTimers.set(driverIdStr, timer);
       }
     });
   });
