@@ -199,10 +199,7 @@ exports.addDriverBankDetails = async (req, res) => {
 
 exports.setDriverStatus = async (req, res) => {
   try {
-    const { status, bearing } = req.body;
-
-    console.log("setDriverStatus setDriverStatussetDriverStatus ==>>>", req.body);
-    
+    const { status, bearing, fcm_token } = req.body;
     let latitude = req.body.latitude ?? req.body.lat;
     let longitude = req.body.longitude ?? req.body.lng ?? req.body.lon;
     const driverId = req.user.id;
@@ -212,7 +209,6 @@ exports.setDriverStatus = async (req, res) => {
     console.log(`Driver ${driverId} set-status: received="${status}" isOnline=${isOnline} lat=${latitude} lng=${longitude}`);
 
     if (isOnline) {
-      // Agar lat/lng app se nahi aaya toh DB ki last known location use karo
       if (!latitude || !longitude) {
         latitude = req.user.Latitude;
         longitude = req.user.Longitude;
@@ -229,8 +225,11 @@ exports.setDriverStatus = async (req, res) => {
         updateData.Longitude = lng;
         updateData.position = `${lat},${lng}`;
       }
+      if (fcm_token) updateData.fcm_token = fcm_token;
 
       await req.user.update(updateData);
+
+      const effectiveFcmToken = fcm_token || req.user.fcm_token;
 
       if (hasLocation) {
         await driverOnline(driverId, {
@@ -238,7 +237,7 @@ exports.setDriverStatus = async (req, res) => {
           longitude: lng,
           bearing: bearing || 0,
           vehicle_category_id: req.user.vehicle_category_id,
-          fcm_token: req.user.fcm_token,
+          fcm_token: effectiveFcmToken,
         });
       } else {
         console.log(`Driver ${driverId} — online without location (GPS pending)`);
