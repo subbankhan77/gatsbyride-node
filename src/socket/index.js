@@ -328,3 +328,4 @@ function setupSocket(io) {
 }
 
 module.exports = setupSocket;
+module.exports.offlineTimers = offlineTimers;

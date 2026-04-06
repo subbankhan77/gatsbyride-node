@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const { Customer, Driver, BankDetails } = require('../models');
 const { apiResponse } = require('../utils/helpers');
 const { driverOnline, driverOffline } = require('../utils/driverLocation');
+const { offlineTimers } = require('../socket');
 
 exports.getCustomerProfile = async (req, res) => {
   try {
@@ -209,6 +210,14 @@ exports.setDriverStatus = async (req, res) => {
     console.log(`Driver ${driverId} set-status: received="${status}" isOnline=${isOnline} lat=${latitude} lng=${longitude}`);
 
     if (isOnline) {
+      // Agar pending offline grace timer hai toh cancel karo
+      const driverIdStr = String(driverId);
+      if (offlineTimers.has(driverIdStr)) {
+        clearTimeout(offlineTimers.get(driverIdStr));
+        offlineTimers.delete(driverIdStr);
+        console.log(`Driver ${driverId} came online via HTTP — offline timer cancelled`);
+      }
+
       if (!latitude || !longitude) {
         latitude = req.user.Latitude;
         longitude = req.user.Longitude;
