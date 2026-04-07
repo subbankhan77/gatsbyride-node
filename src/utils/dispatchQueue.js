@@ -161,8 +161,8 @@ async function _sendToCurrentDriver(state, io) {
   // 1️⃣ Socket — driver connected ho toh turant mile
   if (io) {
     const room = io.sockets.adapter.rooms.get(`driver_${driver.driver_id}`);
-    console.log(`🔔 Emitting CustomerBookRequest to driver_${driver.driver_id} — room size: ${room ? room.size : 0}`);
-    io.to(`driver_${driver.driver_id}`).emit('CustomerBookRequest', payload);
+    console.log(`🔔 Emitting newRideRequest to driver_${driver.driver_id} — room size: ${room ? room.size : 0}`);
+    io.to(`driver_${driver.driver_id}`).emit('newRideRequest', payload);
   }
 
   // 2️⃣ FCM — background / killed app ke liye

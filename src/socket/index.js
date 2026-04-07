@@ -227,10 +227,11 @@ function setupSocket(io) {
 
         try {
           // Order + Driver full details fetch karo (PHP jaisa)
+          const { Driver: DriverModel } = require('../models');
           const order = await Order.findOne({
             where: { id: orderID },
             include: [{
-              model: Driver,
+              model: DriverModel,
               as: 'driver',
               attributes: ['id', 'name', 'image', 'Latitude', 'Longitude', 'phone', 'plate_number', 'vehicle_name', 'car_model', 'fcm_token'],
             }],
