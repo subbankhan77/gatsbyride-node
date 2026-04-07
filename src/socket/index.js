@@ -48,7 +48,8 @@ function setupSocket(io) {
       const customerId = data?.customer_id || socket.userId;
       if (customerId) {
         socket.join(`customer_${customerId}`);
-        console.log(`Customer ${customerId} joined room`);
+        const roomSize = io.sockets.adapter.rooms.get(`customer_${customerId}`)?.size || 0;
+        console.log(`Customer ${customerId} joined room — room size: ${roomSize}`);
       }
     });
 
@@ -213,25 +214,75 @@ function setupSocket(io) {
       io.to(`order_${order_id}`).emit('order_status_update', { order_id, status });
     });
 
-    // ── Driver Accept Order (socket se accept) ───────────────────────────────
-    socket.on('driver_accept_order', async (data) => {
-      const { order_id, driver_id, customer_id } = data;
-      const dId = driver_id || socket.userId;
+    // ── Driver: message event handler (PHP legacy format) ───────────────────
+    socket.on('message', async (data) => {
+      const { serviceType, UserID, orderID } = data;
+      const driverId = UserID || socket.userId;
 
-      // Dispatch band karo + driver busy mark karo
-      stopDispatch(order_id).catch(() => {});
-      setDriverBusy(dId).catch(() => {});
+      if (serviceType === 'Accept') {
+        console.log(`✅ Accept received: order=${orderID} driver=${driverId}`);
 
-      io.to(`customer_${customer_id}`).emit('driver_accepted', {
-        order_id,
-        driver_id: dId,
-        status: 1,
-      });
+        stopDispatch(orderID).catch(() => {});
+        setDriverBusy(driverId).catch(() => {});
+
+        try {
+          // Order + Driver full details fetch karo (PHP jaisa)
+          const order = await Order.findOne({
+            where: { id: orderID },
+            include: [{
+              model: Driver,
+              as: 'driver',
+              attributes: ['id', 'name', 'image', 'Latitude', 'Longitude', 'phone', 'plate_number', 'vehicle_name', 'car_model', 'fcm_token'],
+            }],
+            attributes: ['id', 'customer_id', 'start_address', 'end_address', 'start_coordinate', 'end_coordinate', 'distance', 'payment_method', 'estimated_time', 'actual_time', 'total', 'pending_amount'],
+          });
+
+          if (!order) {
+            console.error(`Accept: Order ${orderID} not found`);
+            return;
+          }
+
+          // DB update — driver assign + status accepted
+          await Order.update({ driver_id: driverId, status: 1 }, { where: { id: orderID } });
+
+          const driver = order.driver;
+          const payload = {
+            Response: 'true',
+            message: 'Data Found',
+            type: 'Accept',
+            data: {
+              id: order.id,
+              start_address: order.start_address,
+              end_address: order.end_address,
+              start_coordinate: order.start_coordinate,
+              end_coordinate: order.end_coordinate,
+              distance: order.distance,
+              payment_method: order.payment_method,
+              estimated_time: order.estimated_time,
+              actual_time: order.actual_time,
+              total: order.total,
+              pending_amount: order.pending_amount,
+              driverID: driverId,
+              name: driver?.name ?? '',
+              image: driver?.image ?? '',
+              Latitude: driver?.Latitude ?? '',
+              Longitude: driver?.Longitude ?? '',
+              phone: driver?.phone ?? '',
+              plate_number: driver?.plate_number ?? '',
+              vehicle_name: driver?.vehicle_name ?? '',
+              car_model: driver?.car_model ?? '',
+            },
+          };
+
+          console.log(`✅ Emitting Accept to customer_${order.customer_id}`);
+          io.to(`customer_${order.customer_id}`).emit('message', payload);
+
+        } catch (err) {
+          console.error('Accept handler error:', err.message);
+        }
+      }
     });
 
-    // ── NEW: Customer Books Ride → Online Drivers Ko Notify Karo ─────────────
-    // ── UserBookDriver — sirf customer ko order room mein join karao ──────────
-    // Dispatch ab createOrder (HTTP) se start hota hai — yahan broadcast nahi hoga
     socket.on('UserBookDriver', async (data) => {
       const { UserID, OrderID } = data;
       console.log(`🚗 UserBookDriver: Customer ${UserID} joining order_${OrderID} room`);
