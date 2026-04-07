@@ -226,15 +226,9 @@ function setupSocket(io) {
         setDriverBusy(driverId).catch(() => {});
 
         try {
-          // Order + Driver full details fetch karo (PHP jaisa)
-          const { Driver: DriverModel } = require('../models');
+          // Order fetch karo
           const order = await Order.findOne({
             where: { id: orderID },
-            include: [{
-              model: DriverModel,
-              as: 'driver',
-              attributes: ['id', 'name', 'image', 'Latitude', 'Longitude', 'phone', 'plate_number', 'vehicle_name', 'car_model', 'fcm_token'],
-            }],
             attributes: ['id', 'customer_id', 'start_address', 'end_address', 'start_coordinate', 'end_coordinate', 'distance', 'payment_method', 'estimated_time', 'actual_time', 'total', 'pending_amount'],
           });
 
@@ -246,7 +240,11 @@ function setupSocket(io) {
           // DB update — driver assign + status accepted
           await Order.update({ driver_id: driverId, status: 1 }, { where: { id: orderID } });
 
-          const driver = order.driver;
+          // Driver details alag se fetch karo (order.driver null hota tha kyunki assign baad mein hota tha)
+          const driver = await Driver.findByPk(driverId, {
+            attributes: ['id', 'name', 'image', 'Latitude', 'Longitude', 'phone', 'plate_number', 'vehicle_name', 'car_model', 'rating'],
+          });
+
           const payload = {
             Response: 'true',
             message: 'Data Found',
@@ -272,6 +270,7 @@ function setupSocket(io) {
               plate_number: driver?.plate_number ?? '',
               vehicle_name: driver?.vehicle_name ?? '',
               car_model: driver?.car_model ?? '',
+              driverRating: driver?.rating ?? '0',
             },
           };
 
