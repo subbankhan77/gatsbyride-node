@@ -153,12 +153,12 @@ async function getAllOnlineDrivers() {
 
 // Driver trip pe gaya — busy mark karo (dispatch skip karega)
 async function setDriverBusy(driverId) {
-  await redis.hset(metaKey(String(driverId)), 'is_available', '1');
+  await redis.hset(metaKey(String(driverId)), 'is_available', '0'); // 0 = not available (busy)
 }
 
 // Trip khatam — free mark karo (dispatch mein aayega)
 async function setDriverFree(driverId) {
-  await redis.hset(metaKey(String(driverId)), 'is_available', '0');
+  await redis.hset(metaKey(String(driverId)), 'is_available', '1'); // 1 = available (free)
 }
 
 module.exports = {

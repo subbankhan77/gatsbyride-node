@@ -12,19 +12,14 @@ const {
 const { stopDispatch } = require('../utils/dispatchQueue');
 const { redis } = require('../config/redis');
 
-// ETA throttle — order per 30 seconds
 const lastEtaUpdate = new Map();
 
-// MySQL location sync — every 30s per driver (persistence ke liye)
 const lastMysqlSync = new Map();
-const MYSQL_SYNC_INTERVAL = 30000; // 30 seconds
+const MYSQL_SYNC_INTERVAL = 30000; 
 
-// Grace period: driver disconnect ke 30s baad offline mark karo
-// Agar 30s mein reconnect kare toh cancel ho jaayega
 const offlineTimers = new Map();
 
 function setupSocket(io) {
-  // ── JWT Auth Middleware ───────────────────────────────────────────────────
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token || socket.handshake.query?.token;
     if (!token) {
@@ -33,7 +28,7 @@ function setupSocket(io) {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       socket.userId = decoded.id;
-      socket.userGuard = decoded.guard; // 'customer' or 'driver'
+      socket.userGuard = decoded.guard; 
       next();
     } catch (err) {
       return next(new Error('Invalid token'));
@@ -43,7 +38,6 @@ function setupSocket(io) {
   io.on('connection', (socket) => {
     console.log(`Socket connected: ${socket.id} | user: ${socket.userId} | guard: ${socket.userGuard}`);
 
-    // ── Customer: Join personal room ─────────────────────────────────────────
     socket.on('join_customer', (data) => {
       const customerId = data?.customer_id || socket.userId;
       if (customerId) {
@@ -53,13 +47,11 @@ function setupSocket(io) {
       }
     });
 
-    // ── Driver: Join personal room + Redis Geo online ─────────────────────────
     socket.on('join_driver', async (data) => {
       try {
         const driverId = data?.driver_id || socket.userId;
         if (!driverId) return;
 
-        // Agar pending offline timer hai toh cancel karo (reconnect hua)
         const driverIdStr = String(driverId);
         if (offlineTimers.has(driverIdStr)) {
           clearTimeout(offlineTimers.get(driverIdStr));
@@ -69,17 +61,11 @@ function setupSocket(io) {
 
         socket.join(`driver_${driverId}`);
         socket.join('drivers_online');
-        socket.driverId = driverId; // disconnect ke liye save karo
-
-        // Redis mein reconnect flag set karo (cross-process timer cancel ke liye)
+        socket.driverId = driverId; 
         await redis.set(`driver:connected:${driverIdStr}`, '1', 'EX', 120);
-
-        // Client se lat/lng aaye toh use karo, warna DB ki stored value lo
         const clientLat = data?.latitude ? parseFloat(data.latitude) : null;
         const clientLng = data?.longitude ? parseFloat(data.longitude) : null;
         const clientBearing = data?.bearing ? parseFloat(data.bearing) : null;
-
-        // Driver ka vehicle_category aur fcm_token MySQL se ek baar lo
         const driver = await Driver.findByPk(driverId, {
           attributes: ['id', 'vehicle_category_id', 'fcm_token', 'Latitude', 'Longitude'],
         });
@@ -92,7 +78,6 @@ function setupSocket(io) {
         const lat = clientLat !== null ? clientLat : (parseFloat(driver.Latitude) || 0);
         const lng = clientLng !== null ? clientLng : (parseFloat(driver.Longitude) || 0);
 
-        // MySQL update — order_status online + lat/lng (agar client ne bheja)
         const mysqlUpdate = { order_status: 'online' };
         if (clientLat !== null && clientLng !== null && !isNaN(clientLat) && !isNaN(clientLng)) {
           mysqlUpdate.Latitude = clientLat;

@@ -113,7 +113,7 @@ async function _sendToCurrentDriver(state, io) {
 
   // Busy driver check — trip pe hai toh skip karo
   const meta = await redis.hgetall(metaKey(String(driver.driver_id)));
-  if (meta && meta.is_available === '1') {
+  if (meta && meta.is_available === '0') {
     console.log(`⏭️  Driver ${driver.driver_id} is busy — skipping`);
     state.current_index += 1;
     if (state.current_index >= state.drivers.length) {
