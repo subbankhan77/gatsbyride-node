@@ -111,6 +111,7 @@ function setupSocket(io) {
       }
     });
 
+    // ── Driver: Location update → Redis Geo (fast) ───────────────────────────
     socket.on('driver_location', async (data) => {
       const { driver_id, latitude, longitude, bearing, order_id, vehicle_category_id } = data;
       const driverId = driver_id || socket.userId;
@@ -186,8 +187,7 @@ function setupSocket(io) {
 
       await Order.update({ status }, { where: { id: order_id } });
 
-      // Cancel → dispatch band karo + driver free karo
-      if (status == 8) { // ORDER_STATUS.CANCEL
+      if (status == 8) {
         stopDispatch(order_id).catch(() => { });
         if (driver_id) setDriverFree(driver_id).catch(() => { });
       }
@@ -197,13 +197,13 @@ function setupSocket(io) {
       io.to(`order_${order_id}`).emit('order_status_update', { order_id, status });
     });
 
-    // ── Driver: message event handler (PHP legacy format) ───────────────────
+    // ── Driver: message event handler ────────────────────────────────────────
     socket.on('message', async (data) => {
       const { serviceType, UserID, orderID, order_id: order_id_snake } = data;
       const driverId = UserID || socket.userId;
 
+      // ── Accept ───────────────────────────────────────────────────────────
       if (serviceType === 'Accept') {
-        // orderID null/undefined aaye toh Redis se reverse lookup karo
         let resolvedOrderId = orderID || order_id_snake;
         if (!resolvedOrderId) {
           const pending = await redis.get(`driver:pending_order:${driverId}`);
@@ -218,7 +218,6 @@ function setupSocket(io) {
         redis.del(`driver:pending_order:${driverId}`).catch(() => { });
 
         try {
-          // Order fetch karo
           const order = await Order.findOne({
             where: { id: resolvedOrderId },
             attributes: ['id', 'customer_id', 'start_address', 'end_address', 'start_coordinate', 'end_coordinate', 'distance', 'payment_method', 'estimated_time', 'actual_time', 'total', 'pending_amount'],
@@ -229,11 +228,10 @@ function setupSocket(io) {
             return;
           }
 
-          // DB update — driver assign + status accepted
           await Order.update({ driver_id: driverId, status: 1 }, { where: { id: resolvedOrderId } });
 
           const driver = await Driver.findByPk(driverId, {
-            attributes: ['id', 'name', 'image', 'Latitude', 'Longitude', 'phone', 'plate_number', 'vehicle_name', 'car_model'],
+            attributes: ['id', 'name', 'image', 'Latitude', 'Longitude', 'phone', 'plate_number', 'vehicle_name', 'car_model', 'rating'],
           });
 
           const payload = {
@@ -273,7 +271,103 @@ function setupSocket(io) {
         }
       }
 
-      // ── Customer: UserBookDriver (message event ke andar aata hai) ───────────
+      // ── ChangeStatus ✅ NAYA ADD KIYA ────────────────────────────────────
+      if (serviceType === 'ChangeStatus') {
+        const { orderID: csOrderId, Status, actualTime, StartTime, EndTime, distance } = data;
+
+        console.log(`🔄 ChangeStatus: order=${csOrderId} status=${Status} driver=${driverId}`);
+
+        try {
+          // DB update
+          const updateFields = { status: Status };
+          if (actualTime) updateFields.actual_time = actualTime;
+          if (StartTime) updateFields.start_time = StartTime || null;
+          if (EndTime) updateFields.end_time = EndTime || null;
+          if (distance) updateFields.actual_distance = distance;
+
+          await Order.update(updateFields, { where: { id: csOrderId } });
+
+          // Order fetch karo
+          const order = await Order.findByPk(csOrderId, {
+            attributes: [
+              'id', 'customer_id', 'driver_id', 'total',
+              'actual_distance', 'distance', 'payment_method',
+              'start_address', 'end_address',
+              'start_coordinate', 'end_coordinate',
+            ],
+          });
+
+          if (!order) {
+            console.error(`ChangeStatus: Order ${csOrderId} not found`);
+            return;
+          }
+
+          // Status → Event type mapping
+          // Customer app in types expect karta hai
+          const statusMap = {
+            '1': 'Accept',
+            '2': 'DepartToCustomer',
+            '3': 'reachLocation',
+            '5': 'startTrip',
+            '7': 'endTrip',
+            '8': 'Reject',
+          };
+
+          const eventType = statusMap[String(Status)];
+          if (!eventType) {
+            console.warn(`ChangeStatus: Unknown status ${Status}`);
+            return;
+          }
+
+          // Payload banao
+          const payload = {
+            type: eventType,
+            message: 'Status Updated',
+            Response: 'true',
+            data: {
+              id: order.id,
+              driverID: driverId,
+              status: Status,
+              start_address: order.start_address,
+              end_address: order.end_address,
+              start_coordinate: order.start_coordinate,
+              end_coordinate: order.end_coordinate,
+              payment_method: order.payment_method,
+              distance: order.distance,
+              total: order.total,
+              actual_distance: order.actual_distance,
+              new_total: order.total,
+              grand_total: order.total,
+              pending_amount: 0,
+              estimated_time: 0,
+              actual_time: actualTime || 0,
+            },
+          };
+
+          // endTrip pe driver free karo
+          if (String(Status) === '7') {
+            setDriverFree(driverId).catch(() => { });
+            payload.data.actual_distance = distance || order.actual_distance;
+          }
+
+          // Cancel pe driver free karo
+          if (String(Status) === '8') {
+            setDriverFree(driverId).catch(() => { });
+            stopDispatch(csOrderId).catch(() => { });
+          }
+
+          // Customer + order room ko emit karo
+          io.to(`customer_${order.customer_id}`).emit('message', payload);
+          io.to(`order_${csOrderId}`).emit('message', payload);
+
+          console.log(`✅ ChangeStatus ${Status} (${eventType}) → customer_${order.customer_id}`);
+
+        } catch (err) {
+          console.error('ChangeStatus handler error:', err.message);
+        }
+      }
+
+      // ── UserBookDriver ───────────────────────────────────────────────────
       if (serviceType === 'UserBookDriver') {
         const { UserID, OrderID } = data;
         console.log(`🚗 UserBookDriver (via message): Customer ${UserID} joining order_${OrderID} room`);
@@ -292,6 +386,7 @@ function setupSocket(io) {
       }
     });
 
+    // ── UserBookDriver (direct event) ────────────────────────────────────────
     socket.on('UserBookDriver', async (data) => {
       const { UserID, OrderID } = data;
       console.log(`🚗 UserBookDriver: Customer ${UserID} joining order_${OrderID} room`);
@@ -322,10 +417,8 @@ function setupSocket(io) {
         timestamp: new Date().toISOString(),
       };
 
-      // Online users ko deliver karo
       io.to(to_room).emit('receive_message', msgPayload);
 
-      // DB mein save karo
       ChatMessage.create({
         order_id: order_id || null,
         sender_id: actualSenderId,
@@ -334,7 +427,6 @@ function setupSocket(io) {
         message,
       }).catch((err) => console.error('Chat save error:', err.message));
 
-      // Receiver offline hai to FCM bhejo
       if (receiver_id) {
         const roomSize = io.sockets.adapter.rooms.get(to_room)?.size || 0;
         if (roomSize === 0) {
@@ -367,21 +459,16 @@ function setupSocket(io) {
       if (socket.userGuard === 'driver' && socket.userId) {
         const driverId = socket.userId;
 
-        // Redis se foran hata do (location stale ho jaayegi)
         await driverOffline(driverId).catch(() => { });
         lastMysqlSync.delete(driverId);
         io.emit('driver_offline', { driver_id: driverId });
         console.log(`Driver ${driverId} disconnected — waiting 30s before marking offline`);
 
-        // MySQL mein 30s grace period ke baad offline karo
-        // Agar driver 30s mein reconnect kare toh join_driver timer cancel karega
         const driverIdStr = String(driverId);
-        // Redis flag clear karo — driver abhi disconnect hua
         await redis.del(`driver:connected:${driverIdStr}`).catch(() => { });
 
         const timer = setTimeout(async () => {
           offlineTimers.delete(driverIdStr);
-          // Redis mein check karo — kisi bhi process mein reconnect hua kya?
           const isReconnected = await redis.get(`driver:connected:${driverIdStr}`).catch(() => null);
           if (isReconnected) {
             console.log(`Driver ${driverId} already reconnected (Redis flag) — skip offline mark`);
