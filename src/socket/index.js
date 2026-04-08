@@ -201,19 +201,20 @@ function setupSocket(io) {
 
     // ── Driver: message event handler (PHP legacy format) ───────────────────
     socket.on('message', async (data) => {
-      const { serviceType, UserID, orderID } = data;
+      const { serviceType, UserID, orderID, order_id: order_id_snake } = data;
       const driverId = UserID || socket.userId;
+      const resolvedOrderId = orderID || order_id_snake;
 
       if (serviceType === 'Accept') {
-        console.log(`✅ Accept received: order=${orderID} driver=${driverId}`);
+        console.log(`✅ Accept received: order=${resolvedOrderId} driver=${driverId}`);
 
-        stopDispatch(orderID).catch(() => {});
+        stopDispatch(resolvedOrderId).catch(() => {});
         setDriverBusy(driverId).catch(() => {});
 
         try {
           // Order fetch karo
           const order = await Order.findOne({
-            where: { id: orderID },
+            where: { id: resolvedOrderId },
             attributes: ['id', 'customer_id', 'start_address', 'end_address', 'start_coordinate', 'end_coordinate', 'distance', 'payment_method', 'estimated_time', 'actual_time', 'total', 'pending_amount'],
           });
 
@@ -223,7 +224,7 @@ function setupSocket(io) {
           }
 
           // DB update — driver assign + status accepted
-          await Order.update({ driver_id: driverId, status: 1 }, { where: { id: orderID } });
+          await Order.update({ driver_id: driverId, status: 1 }, { where: { id: resolvedOrderId } });
 
           // Driver details alag se fetch karo (order.driver null hota tha kyunki assign baad mein hota tha)
           const driver = await Driver.findByPk(driverId, {
