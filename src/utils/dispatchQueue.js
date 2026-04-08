@@ -128,6 +128,9 @@ async function _sendToCurrentDriver(state, io) {
 
   console.log(`📤 Dispatch order ${order_id} → Driver ${driver.driver_id} (${current_index + 1}/${total}, ${driver.distance_km?.toFixed(2) ?? '?'} km)`);
 
+  // Reverse mapping: driver → pending order (Accept ke waqt order_id dhoondne ke liye)
+  await redis.set(`driver:pending_order:${driver.driver_id}`, String(order_id), 'EX', 600);
+
   // Order details fetch karo
   const order = await Order.findByPk(order_id, {
     attributes: [

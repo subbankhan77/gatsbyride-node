@@ -205,13 +205,21 @@ function setupSocket(io) {
     socket.on('message', async (data) => {
       const { serviceType, UserID, orderID, order_id: order_id_snake } = data;
       const driverId = UserID || socket.userId;
-      const resolvedOrderId = orderID || order_id_snake;
 
       if (serviceType === 'Accept') {
+        // orderID null/undefined aaye toh Redis se reverse lookup karo
+        let resolvedOrderId = orderID || order_id_snake;
+        if (!resolvedOrderId) {
+          const pending = await redis.get(`driver:pending_order:${driverId}`);
+          resolvedOrderId = pending ? parseInt(pending) : null;
+          if (resolvedOrderId) console.log(`🔍 order_id Redis se mila: ${resolvedOrderId} (driver ${driverId})`);
+        }
+
         console.log(`✅ Accept received: order=${resolvedOrderId} driver=${driverId}`);
 
         stopDispatch(resolvedOrderId).catch(() => {});
         setDriverBusy(driverId).catch(() => {});
+        redis.del(`driver:pending_order:${driverId}`).catch(() => {});
 
         try {
           // Order fetch karo
@@ -267,6 +275,24 @@ function setupSocket(io) {
 
         } catch (err) {
           console.error('Accept handler error:', err.message);
+        }
+      }
+
+      // ── Customer: UserBookDriver (message event ke andar aata hai) ───────────
+      if (serviceType === 'UserBookDriver') {
+        const { UserID, OrderID } = data;
+        console.log(`🚗 UserBookDriver (via message): Customer ${UserID} joining order_${OrderID} room`);
+        try {
+          const order = await Order.findByPk(OrderID, { attributes: ['id', 'customer_id'] });
+          if (!order) {
+            socket.emit('noDriverAvailable', { order_id: OrderID, message: 'Order not found' });
+            return;
+          }
+          socket.join(`customer_${UserID}`);
+          socket.join(`order_${OrderID}`);
+          console.log(`✅ Customer ${UserID} joined customer_${UserID} + order_${OrderID} rooms`);
+        } catch (err) {
+          console.error('❌ UserBookDriver (message) error:', err.message);
         }
       }
     });
