@@ -11,6 +11,7 @@ const {
 } = require('../utils/driverLocation');
 const { stopDispatch } = require('../utils/dispatchQueue');
 const { redis } = require('../config/redis');
+const { attachSocketLogger } = require('../middleware/logger');
 
 const lastEtaUpdate = new Map();
 
@@ -37,6 +38,7 @@ function setupSocket(io) {
 
   io.on('connection', (socket) => {
     console.log(`Socket connected: ${socket.id} | user: ${socket.userId} | guard: ${socket.userGuard}`);
+    attachSocketLogger(socket);
 
     socket.on('join_customer', (data) => {
       const customerId = data?.customer_id || socket.userId;

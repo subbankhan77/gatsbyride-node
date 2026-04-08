@@ -15,6 +15,7 @@ const adminRoutes = require('./routes/admin');
 const setupSocket = require('./socket');
 const { driverOnline } = require('./utils/driverLocation');
 const { Driver } = require('./models');
+const { apiLogger } = require('./middleware/logger');
 
 const app = express();
 app.set('trust proxy', 1); // Nginx reverse proxy ke liye
@@ -97,6 +98,9 @@ app.use((req, res, next) => {
   req.io = io;
   next();
 });
+
+// ─── API Request / Response Logger ───────────────────────────────────────────
+app.use(apiLogger);
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/webservice', routes);
