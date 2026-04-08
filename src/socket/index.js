@@ -16,7 +16,7 @@ const { attachSocketLogger } = require('../middleware/logger');
 const lastEtaUpdate = new Map();
 
 const lastMysqlSync = new Map();
-const MYSQL_SYNC_INTERVAL = 30000; 
+const MYSQL_SYNC_INTERVAL = 30000;
 
 const offlineTimers = new Map();
 
@@ -29,7 +29,7 @@ function setupSocket(io) {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       socket.userId = decoded.id;
-      socket.userGuard = decoded.guard; 
+      socket.userGuard = decoded.guard;
       next();
     } catch (err) {
       return next(new Error('Invalid token'));
@@ -63,7 +63,7 @@ function setupSocket(io) {
 
         socket.join(`driver_${driverId}`);
         socket.join('drivers_online');
-        socket.driverId = driverId; 
+        socket.driverId = driverId;
         await redis.set(`driver:connected:${driverIdStr}`, '1', 'EX', 120);
         const clientLat = data?.latitude ? parseFloat(data.latitude) : null;
         const clientLng = data?.longitude ? parseFloat(data.longitude) : null;
@@ -90,7 +90,6 @@ function setupSocket(io) {
           }
         }
 
-        // MySQL aur Redis dono parallel mein — ek ke fail hone se doosra na ruke
         await Promise.allSettled([
           Driver.update(mysqlUpdate, { where: { id: driverId } }),
           driverOnline(driverId, {
@@ -112,7 +111,6 @@ function setupSocket(io) {
       }
     });
 
-    // ── Driver: Location update → Redis Geo (fast) ───────────────────────────
     socket.on('driver_location', async (data) => {
       const { driver_id, latitude, longitude, bearing, order_id, vehicle_category_id } = data;
       const driverId = driver_id || socket.userId;
@@ -124,14 +122,12 @@ function setupSocket(io) {
         return;
       }
 
-      // Redis update — fast, no MySQL hit
       try {
         await updateDriverLocation(driverId, { latitude: lat, longitude: lng, bearing, vehicle_category_id });
       } catch (redisErr) {
         console.error(`[driver_location] Redis error for driver ${driverId}:`, redisErr.message);
       }
 
-      // MySQL sync — sirf har 30 seconds mein
       const now = Date.now();
       const lastSync = lastMysqlSync.get(driverId) || 0;
       if (now - lastSync >= MYSQL_SYNC_INTERVAL) {
@@ -192,8 +188,8 @@ function setupSocket(io) {
 
       // Cancel → dispatch band karo + driver free karo
       if (status == 8) { // ORDER_STATUS.CANCEL
-        stopDispatch(order_id).catch(() => {});
-        if (driver_id) setDriverFree(driver_id).catch(() => {});
+        stopDispatch(order_id).catch(() => { });
+        if (driver_id) setDriverFree(driver_id).catch(() => { });
       }
 
       if (customer_id) io.to(`customer_${customer_id}`).emit('order_status_update', { order_id, status });
@@ -217,9 +213,9 @@ function setupSocket(io) {
 
         console.log(`✅ Accept received: order=${resolvedOrderId} driver=${driverId}`);
 
-        stopDispatch(resolvedOrderId).catch(() => {});
-        setDriverBusy(driverId).catch(() => {});
-        redis.del(`driver:pending_order:${driverId}`).catch(() => {});
+        stopDispatch(resolvedOrderId).catch(() => { });
+        setDriverBusy(driverId).catch(() => { });
+        redis.del(`driver:pending_order:${driverId}`).catch(() => { });
 
         try {
           // Order fetch karo
@@ -236,9 +232,8 @@ function setupSocket(io) {
           // DB update — driver assign + status accepted
           await Order.update({ driver_id: driverId, status: 1 }, { where: { id: resolvedOrderId } });
 
-          // Driver details alag se fetch karo (order.driver null hota tha kyunki assign baad mein hota tha)
           const driver = await Driver.findByPk(driverId, {
-            attributes: ['id', 'name', 'image', 'Latitude', 'Longitude', 'phone', 'plate_number', 'vehicle_name', 'car_model', 'rating'],
+            attributes: ['id', 'name', 'image', 'Latitude', 'Longitude', 'phone', 'plate_number', 'vehicle_name', 'car_model'],
           });
 
           const payload = {
@@ -373,7 +368,7 @@ function setupSocket(io) {
         const driverId = socket.userId;
 
         // Redis se foran hata do (location stale ho jaayegi)
-        await driverOffline(driverId).catch(() => {});
+        await driverOffline(driverId).catch(() => { });
         lastMysqlSync.delete(driverId);
         io.emit('driver_offline', { driver_id: driverId });
         console.log(`Driver ${driverId} disconnected — waiting 30s before marking offline`);
@@ -382,7 +377,7 @@ function setupSocket(io) {
         // Agar driver 30s mein reconnect kare toh join_driver timer cancel karega
         const driverIdStr = String(driverId);
         // Redis flag clear karo — driver abhi disconnect hua
-        await redis.del(`driver:connected:${driverIdStr}`).catch(() => {});
+        await redis.del(`driver:connected:${driverIdStr}`).catch(() => { });
 
         const timer = setTimeout(async () => {
           offlineTimers.delete(driverIdStr);

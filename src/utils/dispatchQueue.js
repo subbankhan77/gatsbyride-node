@@ -1,16 +1,3 @@
-/**
- * Sequential Dispatch Queue — Ola/Uber style
- *
- * Flow:
- *   Order create → nearest driver[0] ko request bhejo
- *   30s timeout  → driver[1] ko bhejo
- *   Driver reject → foran driver[1] ko bhejo
- *   Driver accept → dispatch stop
- *   Saare drivers exhaust → order cancel, customer ko notify
- *
- * State: Redis `dispatch:{order_id}` mein stored (10 min TTL)
- * Timers: in-memory Map (process-local, restart pe reset)
- */
 
 const { redis } = require('../config/redis');
 const { Order, Customer } = require('../models');
@@ -23,7 +10,6 @@ const DRIVER_TIMEOUT_SEC = parseInt(process.env.DISPATCH_TIMEOUT_SEC) || 30;
 
 const dispatchKey = (orderId) => `dispatch:${orderId}`;
 
-// In-memory timers — orderId (string) → setTimeout handle
 const dispatchTimers = new Map();
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -45,15 +31,11 @@ async function startDispatch(orderId, drivers, io) {
   await _sendToCurrentDriver(state, io);
 }
 
-/**
- * Next driver pe move karo (timeout ya reject ke baad)
- */
 async function dispatchNext(orderId, io) {
   _clearTimer(orderId);
 
   const raw = await redis.get(dispatchKey(orderId));
-  if (!raw) return; // dispatch already stopped
-
+  if (!raw) return;
   const state = JSON.parse(raw);
   state.current_index += 1;
 
@@ -63,7 +45,6 @@ async function dispatchNext(orderId, io) {
     return;
   }
 
-  // Customer ko batao — dusra driver dhundh rahe hain
   const order = await Order.findByPk(orderId, { attributes: ['customer_id'] });
   if (io && order?.customer_id) {
     io.to(`customer_${order.customer_id}`).emit('lookingForDriver', {
@@ -138,6 +119,10 @@ async function _sendToCurrentDriver(state, io) {
       'start_coordinate', 'end_coordinate', 'total',
       'payment_method', 'vehicle_category_id', 'status',
     ],
+    include: [{
+      model: Customer,
+      attributes: ['name', 'image'],
+    }],
   });
 
   // Order gone / already accepted
@@ -148,27 +133,32 @@ async function _sendToCurrentDriver(state, io) {
   }
 
   const payload = {
+    type: 'CustomerBookRequest',
+    id: order_id,
     order_id,
     customer_id: order.customer_id,
+    customerID: order.customer_id,
+    name: order.Customer?.name ?? '',
+    image: order.Customer?.image ?? '',
     start_address: order.start_address,
     end_address: order.end_address,
     start_coordinate: order.start_coordinate,
     end_coordinate: order.end_coordinate,
     total: order.total,
+    new_total: order.total,
     payment_method: order.payment_method,
     vehicle_category_id: order.vehicle_category_id,
-    distance_km: driver.distance_km ?? null,
-    expires_in: DRIVER_TIMEOUT_SEC, // driver app countdown ke liye
+    distance: driver.distance_km ?? null,
+    expires_in: DRIVER_TIMEOUT_SEC,
   };
 
-  // 1️⃣ Socket — driver connected ho toh turant mile
+
   if (io) {
     const room = io.sockets.adapter.rooms.get(`driver_${driver.driver_id}`);
     console.log(`🔔 Emitting newRideRequest to driver_${driver.driver_id} — room size: ${room ? room.size : 0}`);
     io.to(`driver_${driver.driver_id}`).emit('newRideRequest', payload);
   }
 
-  // 2️⃣ FCM — background / killed app ke liye
   if (driver.fcm_token) {
     sendNotification(
       driver.fcm_token,
@@ -176,19 +166,18 @@ async function _sendToCurrentDriver(state, io) {
       `Pickup: ${order.start_address || 'New location'}`,
       {
         type: 'new_ride',
-        order_id:            String(order_id),
-        customer_id:         String(order.customer_id),
+        order_id: String(order_id),
+        customer_id: String(order.customer_id),
         vehicle_category_id: String(order.vehicle_category_id || ''),
-        start_address:       String(order.start_address || ''),
-        end_address:         String(order.end_address || ''),
-        total:               String(order.total || ''),
-        payment_method:      String(order.payment_method || ''),
-        expires_in:          String(DRIVER_TIMEOUT_SEC),
+        start_address: String(order.start_address || ''),
+        end_address: String(order.end_address || ''),
+        total: String(order.total || ''),
+        payment_method: String(order.payment_method || ''),
+        expires_in: String(DRIVER_TIMEOUT_SEC),
       }
     ).catch((err) => console.error(`FCM dispatch error driver ${driver.driver_id}:`, err.message));
   }
 
-  // 3️⃣ Timeout — 30s baad next driver
   const timer = setTimeout(() => {
     console.log(`⏱️  Driver ${driver.driver_id} timed out for order ${order_id}`);
     dispatchNext(order_id, io);
@@ -229,7 +218,7 @@ async function _noDriverAvailable(orderId, io) {
       'No Driver Available',
       'No drivers found nearby. Please try again.',
       { type: 'no_driver', order_id: String(orderId) }
-    ).catch(() => {});
+    ).catch(() => { });
   }
 }
 
