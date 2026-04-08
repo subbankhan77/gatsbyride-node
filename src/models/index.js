@@ -72,6 +72,7 @@ const Driver = sequelize.define('Driver', {
   position: DataTypes.STRING,
   bearing: DataTypes.FLOAT,
   image: DataTypes.STRING,
+  rating: { type: DataTypes.DECIMAL(3,2), defaultValue: 0.00 },
   is_available: { type: DataTypes.TINYINT, defaultValue: 0 },
   Latitude: DataTypes.DECIMAL(10, 8),
   Longitude: DataTypes.DECIMAL(11, 8),
