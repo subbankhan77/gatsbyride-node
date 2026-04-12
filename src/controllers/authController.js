@@ -49,7 +49,8 @@ exports.customerLogin = async (req, res) => {
 exports.driverLogin = async (req, res) => {
   try {
     const { email, password, fcm_token, device_type } = req.body;
-
+    console.log("Driver Login Body =>",req.body);
+    
     const driver = await Driver.findOne({ where: { email } });
     if (!driver) return apiResponse(res, 422, false, 'Email not found');
 
