@@ -12,14 +12,6 @@ const dispatchKey = (orderId) => `dispatch:${orderId}`;
 
 const dispatchTimers = new Map();
 
-// ─── Public API ───────────────────────────────────────────────────────────────
-
-/**
- * Dispatch shuru karo
- * @param {number} orderId
- * @param {Array}  drivers  — [{driver_id, fcm_token, distance_km, ...}] sorted by distance
- * @param {object} io       — socket.io instance
- */
 async function startDispatch(orderId, drivers, io) {
   if (!drivers || drivers.length === 0) {
     await _noDriverAvailable(orderId, io);
@@ -57,27 +49,18 @@ async function dispatchNext(orderId, io) {
   await _sendToCurrentDriver(state, io);
 }
 
-/**
- * Dispatch band karo (driver ne accept kiya)
- */
 async function stopDispatch(orderId) {
   _clearTimer(orderId);
   await redis.del(dispatchKey(orderId));
   console.log(`✅ Dispatch stopped for order ${orderId}`);
 }
 
-/**
- * Current dispatch target driver return karo
- * (accept check ke liye — optional strict mode)
- */
 async function getCurrentDispatchDriver(orderId) {
   const raw = await redis.get(dispatchKey(orderId));
   if (!raw) return null;
   const state = JSON.parse(raw);
   return state.drivers[state.current_index] || null;
 }
-
-// ─── Internal helpers ─────────────────────────────────────────────────────────
 
 function _clearTimer(orderId) {
   const key = String(orderId);
@@ -92,7 +75,6 @@ async function _sendToCurrentDriver(state, io) {
   const driver = drivers[current_index];
   const total = drivers.length;
 
-  // Busy driver check — trip pe hai toh skip karo
   const meta = await redis.hgetall(metaKey(String(driver.driver_id)));
   if (meta && meta.is_available === '0') {
     console.log(`⏭️  Driver ${driver.driver_id} is busy — skipping`);
@@ -109,10 +91,8 @@ async function _sendToCurrentDriver(state, io) {
 
   console.log(`📤 Dispatch order ${order_id} → Driver ${driver.driver_id} (${current_index + 1}/${total}, ${driver.distance_km?.toFixed(2) ?? '?'} km)`);
 
-  // Reverse mapping: driver → pending order (Accept ke waqt order_id dhoondne ke liye)
   await redis.set(`driver:pending_order:${driver.driver_id}`, String(order_id), 'EX', 600);
 
-  // Order details fetch karo
   const order = await Order.findByPk(order_id, {
     attributes: [
       'id', 'customer_id', 'start_address', 'end_address',
@@ -125,7 +105,6 @@ async function _sendToCurrentDriver(state, io) {
     }],
   });
 
-  // Order gone / already accepted
   if (!order || order.status !== ORDER_STATUS.PENDING) {
     await redis.del(dispatchKey(order_id));
     _clearTimer(order_id);
@@ -151,7 +130,6 @@ async function _sendToCurrentDriver(state, io) {
     distance: driver.distance_km ?? null,
     expires_in: DRIVER_TIMEOUT_SEC,
   };
-
 
   if (io) {
     const room = io.sockets.adapter.rooms.get(`driver_${driver.driver_id}`);
@@ -194,13 +172,11 @@ async function _noDriverAvailable(orderId, io) {
   });
   if (!order || order.status !== ORDER_STATUS.PENDING) return;
 
-  // Order cancel karo
   await Order.update(
     { status: ORDER_STATUS.CANCEL },
     { where: { id: orderId, status: ORDER_STATUS.PENDING } }
   );
 
-  // Socket — customer ko notify karo
   if (io && order.customer_id) {
     io.to(`customer_${order.customer_id}`).emit('noDriverAvailable', {
       order_id: orderId,
@@ -208,7 +184,6 @@ async function _noDriverAvailable(orderId, io) {
     });
   }
 
-  // FCM — agar customer app background mein ho
   const customer = await Customer.findByPk(order.customer_id, {
     attributes: ['fcm_token'],
   });

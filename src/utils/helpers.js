@@ -2,18 +2,12 @@ const jwt = require('jsonwebtoken');
 const axios = require('axios');
 require('dotenv').config();
 
-/**
- * Generate JWT token for user
- */
 function generateToken(payload) {
   return jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '30d',
   });
 }
 
-/**
- * Calculate distance between two coordinates (Haversine formula) in KM
- */
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
   const dLat = toRad(lat2 - lat1);
@@ -30,9 +24,6 @@ function toRad(val) {
   return (val * Math.PI) / 180;
 }
 
-/**
- * Get driving distance from Google Maps API
- */
 async function getDrivingDistance(origin, destination) {
   try {
     const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin}&destinations=${destination}&key=${process.env.GOOGLE_KEY}`;
@@ -40,9 +31,9 @@ async function getDrivingDistance(origin, destination) {
     if (data.rows[0].elements[0].status === 'OK') {
       return {
         distance_text: data.rows[0].elements[0].distance.text,
-        distance_value: data.rows[0].elements[0].distance.value, // meters
+        distance_value: data.rows[0].elements[0].distance.value,
         duration_text: data.rows[0].elements[0].duration.text,
-        duration_value: data.rows[0].elements[0].duration.value, // seconds
+        duration_value: data.rows[0].elements[0].duration.value,
       };
     }
     return null;
@@ -52,12 +43,6 @@ async function getDrivingDistance(origin, destination) {
   }
 }
 
-/**
- * Calculate fare for an order
- * @param {object} category - VehicleCategory
- * @param {number} distanceKm - Actual distance in KM
- * @param {number} durationMin - Duration in minutes
- */
 function calculateFare(category, distanceKm, durationMin = 0) {
   let total = parseFloat(category.base_fare) || 0;
   const km = parseFloat(distanceKm) || 0;
@@ -81,10 +66,6 @@ function calculateFare(category, distanceKm, durationMin = 0) {
   return parseFloat(total.toFixed(2));
 }
 
-/**
- * Get full route polyline + step-by-step directions from Google Maps Directions API
- * Returns encoded polyline so Flutter/React Native can draw road-following route on map
- */
 async function getRoutePolyline(origin, destination) {
   try {
     const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}&key=${process.env.GOOGLE_KEY}`;
@@ -93,18 +74,18 @@ async function getRoutePolyline(origin, destination) {
       const route = data.routes[0];
       const leg = route.legs[0];
       return {
-        polyline: route.overview_polyline.points, // encoded polyline string
+        polyline: route.overview_polyline.points,
         distance_text: leg.distance.text,
-        distance_value: leg.distance.value,       // meters
+        distance_value: leg.distance.value,
         duration_text: leg.duration.text,
-        duration_value: leg.duration.value,       // seconds
+        duration_value: leg.duration.value,
         steps: leg.steps.map((step) => ({
           instruction: step.html_instructions,
           distance: step.distance,
           duration: step.duration,
           start_location: step.start_location,
           end_location: step.end_location,
-          polyline: step.polyline.points,         // per-step polyline
+          polyline: step.polyline.points,
         })),
       };
     }
@@ -115,9 +96,6 @@ async function getRoutePolyline(origin, destination) {
   }
 }
 
-/**
- * Get live ETA from driver's current location to a destination
- */
 async function getLiveETA(driverLat, driverLng, destLat, destLng) {
   try {
     const origin = `${driverLat},${driverLng}`;
@@ -129,39 +107,18 @@ async function getLiveETA(driverLat, driverLng, destLat, destLng) {
   }
 }
 
-/**
- * Calculate surge multiplier based on demand/supply ratio
- * @param {number} activeOrders - pending/active orders in area
- * @param {number} availableDrivers - free drivers in area
- * @param {object} [options]
- * @param {boolean} [options.isPeakHour] - whether current time is peak hour
- * @returns {number} surge multiplier (1.0 = normal, 1.5 = 1.5x, etc.)
- */
-function getSurgeMultiplier(activeOrders, availableDrivers, { isPeakHour = false } = {}) {
-  const ratio = activeOrders / Math.max(availableDrivers, 1);
-
-  let multiplier = 1.0;
-  if (ratio > 3)      multiplier = 2.0;
-  else if (ratio > 2) multiplier = 1.5;
-  else if (ratio > 1) multiplier = 1.2;
-
-  // Extra 20% during peak hours (8-10am, 5-8pm, 11pm-2am)
-  if (isPeakHour) multiplier = parseFloat((multiplier * 1.2).toFixed(2));
-
-  return parseFloat(multiplier.toFixed(2));
+function getSurgeMultiplier() {
+  // Surge disabled: nearbyActiveOrders was counting globally (no location filter),
+  // causing incorrect ratio and double pricing. Always return 1.0 until
+  // location-based active order counting is implemented.
+  return 1.0;
 }
 
-/**
- * Check if current time is a peak hour
- */
 function checkPeakHour() {
   const hour = new Date().getHours();
   return (hour >= 8 && hour < 10) || (hour >= 17 && hour < 20) || (hour >= 23 || hour < 2);
 }
 
-/**
- * Standard API response format
- */
 function apiResponse(res, statusCode, success, message, data = null) {
   const response = { status: success, message };
   if (data !== null) response.data = data;

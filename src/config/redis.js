@@ -11,7 +11,6 @@ const redis = new Redis(REDIS_URL, {
 redis.on('connect', () => console.log('✅ Redis connected'));
 redis.on('error', (err) => console.error('❌ Redis error:', err.message));
 
-// Separate clients for Socket.io pub/sub (required by adapter)
 const createPubSubClients = () => ({
   pubClient: new Redis(REDIS_URL, { lazyConnect: true }),
   subClient: new Redis(REDIS_URL, { lazyConnect: true }),

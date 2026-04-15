@@ -15,7 +15,6 @@ require('dotenv').config();
 
 const NOTIFY_RADIUS_KM = parseFloat(process.env.NOTIFY_RADIUS_KM) || 100;
 
-// ─── Create Order (Customer) ──────────────────────────────────────────────────
 exports.createOrder = async (req, res) => {
   try {
     const {
@@ -26,34 +25,29 @@ exports.createOrder = async (req, res) => {
     const category = await VehicleCategory.findByPk(vehicle_category_id);
     if (!category) return apiResponse(res, 422, false, 'Vehicle category not found');
 
-    // ── Surge Pricing ──────────────────────────────────────────────────────────
     const [customerLat, customerLng] = (start_coordinate || '0,0').split(',').map(Number);
 
-    // Count pending/active orders near pickup (radius 5km) — MySQL (orders cache nahi hote)
     const nearbyActiveOrders = await Order.count({
       where: {
         status: { [Op.in]: [ORDER_STATUS.PENDING, ORDER_STATUS.DRIVER_ACCEPT, ORDER_STATUS.DEPARTURE_TO_CUSTOMER] },
       },
     });
 
-    // Count free drivers near pickup — Redis Geo se (MySQL nahi)
     const nearbyDriversGeo = await getNearbyDrivers(customerLat, customerLng, 5, vehicle_category_id);
     const nearbyFreeDrivers = nearbyDriversGeo.length;
 
     const surgeMultiplier = getSurgeMultiplier(nearbyActiveOrders, nearbyFreeDrivers, { isPeakHour: checkPeakHour() });
 
-    // ── Fare Calculation with Surge ────────────────────────────────────────────
     const baseFare = calculateFare(category, distance || 0);
     const total = parseFloat((baseFare * surgeMultiplier).toFixed(2));
 
-    // ── Route Polyline (Google Directions) ────────────────────────────────────
     let routePolyline = null;
     let estimatedTime = null;
     if (start_coordinate && end_coordinate) {
       const routeData = await getRoutePolyline(start_coordinate, end_coordinate);
       if (routeData) {
         routePolyline = routeData.polyline;
-        estimatedTime = Math.round(routeData.duration_value / 60); // seconds → minutes
+        estimatedTime = Math.round(routeData.duration_value / 60);
       }
     }
 
@@ -74,11 +68,8 @@ exports.createOrder = async (req, res) => {
       estimated_time: estimatedTime,
     });
 
-    // ── Sequential Dispatch — nearest driver pehle, phir next ────────────────
-    // Redis Geo se nearby drivers lo (distance ke order mein — closest first)
     let dispatchDrivers = await getNearbyDrivers(customerLat, customerLng, NOTIFY_RADIUS_KM, vehicle_category_id);
 
-    // MySQL Fallback — Redis empty ho toh MySQL se lo
     if (dispatchDrivers.length === 0) {
       console.log('Redis empty — falling back to MySQL for dispatch');
       const mysqlDrivers = await Driver.findAll({
@@ -105,7 +96,6 @@ exports.createOrder = async (req, res) => {
 
     console.log(`🚀 Starting dispatch for order ${order.id} — ${dispatchDrivers.length} drivers in queue`);
 
-    // Dispatch shuru karo (async — response wait nahi karega)
     startDispatch(order.id, dispatchDrivers, req.io).catch((err) =>
       console.error('Dispatch error:', err.message)
     );
@@ -116,7 +106,6 @@ exports.createOrder = async (req, res) => {
   }
 };
 
-// ─── Update Order Status (Customer or Driver) ─────────────────────────────────
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { order_id, status } = req.body;
@@ -130,10 +119,8 @@ exports.updateOrderStatus = async (req, res) => {
 
     if (!order) return apiResponse(res, 404, false, 'Order not found');
 
-    // Customer cancel → dispatch band karo
     if (status == ORDER_STATUS.CANCEL) {
       stopDispatch(order_id).catch(() => {});
-      // Agar driver trip pe tha toh use free karo
       if (order.driver_id) {
         setDriverFree(order.driver_id).catch(() => {});
       }
@@ -141,20 +128,14 @@ exports.updateOrderStatus = async (req, res) => {
 
     await order.update({ status });
 
-    // Socket.io: notify relevant parties of status change
     if (req.io) {
       req.io.emit(`order_status_${order_id}`, { order_id, status });
-
-      // Notify customer room
       req.io.to(`customer_${order.customer_id}`).emit('order_status_update', { order_id, status });
-
-      // Notify driver room
       if (order.driver_id) {
         req.io.to(`driver_${order.driver_id}`).emit('order_status_update', { order_id, status });
       }
     }
 
-    // FCM Push notifications based on status
     if (status == ORDER_STATUS.DRIVER_ACCEPT && order.Customer?.fcm_token) {
       await sendNotification(
         order.Customer.fcm_token,
@@ -177,7 +158,6 @@ exports.updateOrderStatus = async (req, res) => {
   }
 };
 
-// ─── Customer: Get Active Orders ──────────────────────────────────────────────
 exports.getCustomerOrders = async (req, res) => {
   try {
     const orders = await Order.findAll({
@@ -194,7 +174,6 @@ exports.getCustomerOrders = async (req, res) => {
   }
 };
 
-// ─── Customer: Order History ──────────────────────────────────────────────────
 exports.customerOrderHistory = async (req, res) => {
   try {
     const orders = await Order.findAll({
@@ -211,7 +190,6 @@ exports.customerOrderHistory = async (req, res) => {
   }
 };
 
-// ─── Customer: Check Order Status ────────────────────────────────────────────
 exports.checkOrderStatusByUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -226,7 +204,6 @@ exports.checkOrderStatusByUser = async (req, res) => {
   }
 };
 
-// ─── Driver: List Available Orders ───────────────────────────────────────────
 exports.driverListOrders = async (req, res) => {
   try {
     const orders = await Order.findAll({
@@ -240,7 +217,6 @@ exports.driverListOrders = async (req, res) => {
   }
 };
 
-// ─── Driver: Get Order Status ─────────────────────────────────────────────────
 exports.driverGetOrderStatus = async (req, res) => {
   try {
     const order = await Order.findOne({
@@ -254,7 +230,6 @@ exports.driverGetOrderStatus = async (req, res) => {
   }
 };
 
-// ─── Driver: Update Order Status ──────────────────────────────────────────────
 exports.driverUpdateOrderStatus = async (req, res) => {
   try {
     const { order_id, status, actual_distance, actual_time } = req.body;
@@ -270,25 +245,23 @@ exports.driverUpdateOrderStatus = async (req, res) => {
       updateData.start_time = new Date();
       await Driver.update({ is_available: 1 }, { where: { id: req.user.id } });
       setDriverBusy(req.user.id).catch(() => {});
-      stopDispatch(order_id).catch(() => {}); // dispatch band karo
+      stopDispatch(order_id).catch(() => {});
     }
     if (status == ORDER_STATUS.COMPLETE || status == ORDER_STATUS.CANCEL) {
       updateData.end_time = new Date();
       if (actual_distance) updateData.actual_distance = actual_distance;
       if (actual_time) updateData.actual_time = actual_time;
       await Driver.update({ is_available: 0 }, { where: { id: req.user.id } });
-      setDriverFree(req.user.id).catch(() => {}); // naye orders ke liye available
+      setDriverFree(req.user.id).catch(() => {});
     }
 
     await order.update(updateData);
 
-    // Socket.io notification
     if (req.io) {
       req.io.to(`customer_${order.customer_id}`).emit('order_status_update', { order_id, status });
       req.io.to(`driver_${req.user.id}`).emit('order_status_update', { order_id, status });
     }
 
-    // FCM to customer
     if (order.Customer?.fcm_token) {
       const titles = {
         [ORDER_STATUS.DRIVER_ACCEPT]: 'Driver Accepted',
@@ -310,7 +283,6 @@ exports.driverUpdateOrderStatus = async (req, res) => {
   }
 };
 
-// ─── Driver: Reject Order ────────────────────────────────────────────────────
 exports.driverRejectOrder = async (req, res) => {
   try {
     const { order_id, reason } = req.body;
@@ -322,7 +294,6 @@ exports.driverRejectOrder = async (req, res) => {
       status: 1,
     });
 
-    // Dispatch queue mein next driver ko bhejo
     dispatchNext(order_id, req.io).catch((err) =>
       console.error('dispatchNext error:', err.message)
     );
@@ -333,7 +304,6 @@ exports.driverRejectOrder = async (req, res) => {
   }
 };
 
-// ─── Driver: Order History ───────────────────────────────────────────────────
 exports.driverOrderHistory = async (req, res) => {
   try {
     const orders = await Order.findAll({
@@ -350,7 +320,6 @@ exports.driverOrderHistory = async (req, res) => {
   }
 };
 
-// ─── Get Cancellation Reasons ─────────────────────────────────────────────────
 exports.rejectReasonList = async (req, res) => {
   try {
     const reasons = await Reason.findAll({ where: { status: 1 } });
@@ -360,7 +329,6 @@ exports.rejectReasonList = async (req, res) => {
   }
 };
 
-// ─── Submit Rating ────────────────────────────────────────────────────────────
 exports.submitRating = async (req, res) => {
   try {
     const { order_id, receiver_id, rating, review, type } = req.body;
@@ -381,7 +349,6 @@ exports.submitRating = async (req, res) => {
   }
 };
 
-// ─── Get Rating List ──────────────────────────────────────────────────────────
 exports.getRatingList = async (req, res) => {
   try {
     const { receiver_id, type } = req.body;
@@ -396,7 +363,6 @@ exports.getRatingList = async (req, res) => {
   }
 };
 
-// ─── Calculate Total Price ────────────────────────────────────────────────────
 exports.getTotalPrice = async (req, res) => {
   try {
     const { vehicle_category_id, distance } = req.query;
@@ -410,7 +376,6 @@ exports.getTotalPrice = async (req, res) => {
   }
 };
 
-// ─── Price by Category ────────────────────────────────────────────────────────
 exports.priceCategory = async (req, res) => {
   try {
     const { vehicle_category_id, distance } = req.body;
@@ -424,10 +389,8 @@ exports.priceCategory = async (req, res) => {
   }
 };
 
-// ─── Get All Driver Locations ─────────────────────────────────────────────────
 exports.getAllDriverLocations = async (req, res) => {
   try {
-    // Redis se lo — MySQL full-scan nahi
     const drivers = await getAllOnlineDrivers();
     return apiResponse(res, 200, true, 'Driver locations', drivers);
   } catch (err) {
@@ -435,11 +398,9 @@ exports.getAllDriverLocations = async (req, res) => {
   }
 };
 
-// ─── Get Specific Driver Location ─────────────────────────────────────────────
 exports.getDriverLocation = async (req, res) => {
   try {
     const { driver_id } = req.query;
-    // Redis se location lo (fast) — MySQL se naam/image separately
     const [loc, driver] = await Promise.all([
       getDriverLocationFromRedis(driver_id),
       Driver.findByPk(driver_id, { attributes: ['id', 'name', 'image'] }),
@@ -451,7 +412,6 @@ exports.getDriverLocation = async (req, res) => {
   }
 };
 
-// ─── Complete Trip ────────────────────────────────────────────────────────────
 exports.updateEndTrip = async (req, res) => {
   try {
     const { order_id, actual_distance, actual_time } = req.body;
@@ -473,7 +433,7 @@ exports.updateEndTrip = async (req, res) => {
     });
 
     await Driver.update({ is_available: 0 }, { where: { id: req.user.id } });
-    setDriverFree(req.user.id).catch(() => {}); // naye orders ke liye available
+    setDriverFree(req.user.id).catch(() => {});
 
     if (req.io) {
       req.io.to(`customer_${order.customer_id}`).emit('trip_completed', { order_id, grand_total: newTotal });
@@ -493,7 +453,6 @@ exports.updateEndTrip = async (req, res) => {
   }
 };
 
-// ─── Get Driving Distance (Google Maps) ───────────────────────────────────────
 exports.getDrivingDistanceRoute = async (req, res) => {
   try {
     const { pickup } = req.params;
@@ -506,7 +465,6 @@ exports.getDrivingDistanceRoute = async (req, res) => {
   }
 };
 
-// ─── Driver: New Requests ─────────────────────────────────────────────────────
 exports.driverNewRequests = async (req, res) => {
   try {
     const { latitude, longitude } = req.body;
@@ -516,7 +474,6 @@ exports.driverNewRequests = async (req, res) => {
       include: [{ model: Customer }, { model: VehicleCategory }],
     });
 
-    // Filter by driver location proximity
     const nearby = orders.filter((order) => {
       const [lat, lng] = (order.start_coordinate || '0,0').split(',').map(Number);
       const dist = haversineDistance(
@@ -532,12 +489,10 @@ exports.driverNewRequests = async (req, res) => {
   }
 };
 
-// ─── Driver: Accept Order (assign driver to order) ────────────────────────────
 exports.driverAcceptOrder = async (req, res) => {
   try {
     const { order_id } = req.body;
 
-    // Driver verification check — unverified driver order accept nahi kar sakta
     const driver = await Driver.findByPk(req.user.id, { attributes: ['verification_status', 'status'] });
     if (!driver || driver.verification_status !== 1) {
       return apiResponse(res, 403, false, 'Account not verified. Please complete verification to accept orders.');
@@ -546,8 +501,6 @@ exports.driverAcceptOrder = async (req, res) => {
       return apiResponse(res, 403, false, 'Your account is suspended.');
     }
 
-    // Atomic UPDATE — sirf ek driver win karega, race condition impossible
-    // driver_id = NULL check + status = PENDING check ek hi query mein
     const [affectedRows] = await Order.update(
       {
         driver_id: req.user.id,
@@ -558,23 +511,20 @@ exports.driverAcceptOrder = async (req, res) => {
         where: {
           id: order_id,
           status: ORDER_STATUS.PENDING,
-          driver_id: null, // sirf unassigned order accept hoga
+          driver_id: null,
         },
       }
     );
 
-    // 0 rows affected = kisi aur driver ne pehle le liya
     if (affectedRows === 0) {
       return apiResponse(res, 409, false, 'Order already accepted by another driver');
     }
 
     await Driver.update({ is_available: 1 }, { where: { id: req.user.id } });
-    setDriverBusy(req.user.id).catch(() => {}); // Redis mein busy mark karo
+    setDriverBusy(req.user.id).catch(() => {});
 
-    // Dispatch queue band karo — aur koi driver ko request mat bhejo
     await stopDispatch(order_id);
 
-    // Customer details fetch karo notification ke liye
     const order = await Order.findByPk(order_id, { include: [{ model: Customer }] });
 
     if (req.io) {
@@ -600,7 +550,6 @@ exports.driverAcceptOrder = async (req, res) => {
   }
 };
 
-// ─── Get Order Route (polyline + steps for map) ───────────────────────────────
 exports.getOrderRoute = async (req, res) => {
   try {
     const { order_id } = req.params;
@@ -610,7 +559,6 @@ exports.getOrderRoute = async (req, res) => {
     });
     if (!order) return apiResponse(res, 404, false, 'Order not found');
 
-    // If polyline already saved, return it directly
     if (order.route_polyline) {
       return apiResponse(res, 200, true, 'Route', {
         order_id: order.id,
@@ -621,11 +569,9 @@ exports.getOrderRoute = async (req, res) => {
       });
     }
 
-    // Fallback: fetch fresh from Google if not saved
     const routeData = await getRoutePolyline(order.start_coordinate, order.end_coordinate);
     if (!routeData) return apiResponse(res, 500, false, 'Could not get route');
 
-    // Save for future calls
     await order.update({
       route_polyline: routeData.polyline,
       estimated_time: Math.round(routeData.duration_value / 60),
@@ -646,12 +592,10 @@ exports.getOrderRoute = async (req, res) => {
   }
 };
 
-// ─── Chat History for an Order ───────────────────────────────────────────────
 exports.getChatHistory = async (req, res) => {
   try {
     const { order_id } = req.params;
 
-    // Sirf apna order ka chat dekh sakta hai
     const order = await Order.findOne({
       where: {
         id: order_id,
@@ -672,7 +616,6 @@ exports.getChatHistory = async (req, res) => {
   }
 };
 
-// ─── Get Surge Info for a location ───────────────────────────────────────────
 exports.getSurgeInfo = async (req, res) => {
   try {
     const { latitude, longitude, vehicle_category_id } = req.query;
@@ -681,7 +624,6 @@ exports.getSurgeInfo = async (req, res) => {
     const lat = parseFloat(latitude);
     const lng = parseFloat(longitude);
 
-    // Active orders near this location — MySQL count (fast, no full-scan)
     const nearbyActive = await Order.count({
       where: {
         status: { [Op.in]: [ORDER_STATUS.PENDING, ORDER_STATUS.DRIVER_ACCEPT, ORDER_STATUS.DEPARTURE_TO_CUSTOMER] },
@@ -689,7 +631,6 @@ exports.getSurgeInfo = async (req, res) => {
       },
     });
 
-    // Free drivers near this location — Redis Geo (fast)
     const nearbyDriversGeo = await getNearbyDrivers(lat, lng, 5, vehicle_category_id || null);
     const nearbyFree = nearbyDriversGeo.length;
 

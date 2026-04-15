@@ -338,7 +338,6 @@ function setupSocket(io) {
             stopDispatch(csOrderId).catch(() => {});
           }
 
-          // ✅ Sirf customer room — double event nahi aayega
           io.to(`customer_${order.customer_id}`).emit('message', payload);
 
           console.log(`✅ ChangeStatus ${Status} (${eventType}) → customer_${order.customer_id}`);

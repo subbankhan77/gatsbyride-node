@@ -3,7 +3,6 @@ const { Customer, Driver, VehicleCategory } = require('../models');
 const { generateToken, apiResponse } = require('../utils/helpers');
 const { ORDER_STATUS } = require('../config/constants');
 
-// ─── Customer Login ───────────────────────────────────────────────────────────
 exports.customerLogin = async (req, res) => {
   try {
     const { email, password, fcm_token, device_type, login_type, social_id } = req.body;
@@ -12,7 +11,6 @@ exports.customerLogin = async (req, res) => {
     if (login_type === 'social' && social_id) {
       customer = await Customer.findOne({ where: { social_id } });
       if (!customer) {
-        // Auto register social user
         customer = await Customer.create({
           name: req.body.name || '',
           email: email || null,
@@ -45,12 +43,11 @@ exports.customerLogin = async (req, res) => {
   }
 };
 
-// ─── Driver Login ─────────────────────────────────────────────────────────────
 exports.driverLogin = async (req, res) => {
   try {
     const { email, password, fcm_token, device_type } = req.body;
     console.log("Driver Login Body =>",req.body);
-    
+
     const driver = await Driver.findOne({ where: { email } });
     if (!driver) return apiResponse(res, 422, false, 'Email not found');
 
@@ -72,7 +69,6 @@ exports.driverLogin = async (req, res) => {
   }
 };
 
-// ─── Customer Register ────────────────────────────────────────────────────────
 exports.customerRegister = async (req, res) => {
   try {
     const { name, email, password, phone, country, fcm_token, device_type } = req.body;
@@ -95,7 +91,6 @@ exports.customerRegister = async (req, res) => {
   }
 };
 
-// ─── Driver Signup (onboarding resume support) ────────────────────────────────
 exports.signUpDriver = async (req, res) => {
   try {
     const { email, password, firebase_uid, fcm_token } = req.body;
@@ -110,11 +105,10 @@ exports.signUpDriver = async (req, res) => {
     const existing = await Driver.findOne({ where: { email } });
 
     if (existing) {
-      // Bank details complete → email already taken
       if (existing.bank_status == 1) {
         return apiResponse(res, 200, false, 'Email already registered');
       }
-      
+
       const token = generateToken({ id: existing.id, guard: 'driver' });
       await existing.update({ api_token: token });
       return apiResponse(res, 200, true, 'Your account is under review by admin.', {
@@ -150,7 +144,6 @@ exports.signUpDriver = async (req, res) => {
   }
 };
 
-// ─── Driver Register ──────────────────────────────────────────────────────────
 exports.driverRegister = async (req, res) => {
   try {
     const { name, first_name, last_name, email, password, phone, country, fcm_token, device_type } = req.body;
@@ -174,7 +167,6 @@ exports.driverRegister = async (req, res) => {
   }
 };
 
-// ─── Customer Logout ──────────────────────────────────────────────────────────
 exports.customerLogout = async (req, res) => {
   try {
     await req.user.update({ api_token: null, fcm_token: null });
@@ -184,7 +176,6 @@ exports.customerLogout = async (req, res) => {
   }
 };
 
-// ─── Driver Logout ────────────────────────────────────────────────────────────
 exports.driverLogout = async (req, res) => {
   try {
     await req.user.update({ api_token: null, fcm_token: null, order_status: 'offline' });
@@ -194,7 +185,6 @@ exports.driverLogout = async (req, res) => {
   }
 };
 
-// ─── Get Vehicle Categories ───────────────────────────────────────────────────
 exports.vehicleCategories = async (req, res) => {
   try {
     const categories = await VehicleCategory.findAll({
@@ -206,7 +196,6 @@ exports.vehicleCategories = async (req, res) => {
   }
 };
 
-// ─── Update Customer FCM Token ────────────────────────────────────────────────
 exports.updateCustomerFcmToken = async (req, res) => {
   try {
     const { fcm_token, device_type } = req.body;
@@ -217,7 +206,6 @@ exports.updateCustomerFcmToken = async (req, res) => {
   }
 };
 
-// ─── Update Driver FCM Token ──────────────────────────────────────────────────
 exports.updateDriverFcmToken = async (req, res) => {
   try {
     const { fcm_token, device_type } = req.body;
@@ -228,7 +216,6 @@ exports.updateDriverFcmToken = async (req, res) => {
   }
 };
 
-// ─── Delete Customer Account ──────────────────────────────────────────────────
 exports.deleteCustomer = async (req, res) => {
   try {
     await req.user.destroy();
@@ -238,7 +225,6 @@ exports.deleteCustomer = async (req, res) => {
   }
 };
 
-// ─── Delete Driver Account ────────────────────────────────────────────────────
 exports.deleteDriver = async (req, res) => {
   try {
     await req.user.destroy();

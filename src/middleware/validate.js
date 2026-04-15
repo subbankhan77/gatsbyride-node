@@ -1,19 +1,17 @@
 const { body, validationResult } = require('express-validator');
 
-// Validation errors check karo aur response bhejo
 const handleValidation = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(422).json({
       status: false,
-      message: errors.array()[0].msg, // Pehli error dikhao
+      message: errors.array()[0].msg, 
       errors: errors.array(),
     });
   }
   next();
 };
 
-// ─── Customer Register ────────────────────────────────────────────────────────
 const validateCustomerRegister = [
   body('email').isEmail().withMessage('Valid email required').normalizeEmail(),
   body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
@@ -22,7 +20,6 @@ const validateCustomerRegister = [
   handleValidation,
 ];
 
-// ─── Driver Register ──────────────────────────────────────────────────────────
 const validateDriverRegister = [
   body('email').isEmail().withMessage('Valid email required').normalizeEmail(),
   body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
@@ -31,14 +28,12 @@ const validateDriverRegister = [
   handleValidation,
 ];
 
-// ─── Login ────────────────────────────────────────────────────────────────────
 const validateLogin = [
   body('email').isEmail().withMessage('Valid email required').normalizeEmail(),
   body('password').notEmpty().withMessage('Password is required'),
   handleValidation,
 ];
 
-// ─── Create Order ─────────────────────────────────────────────────────────────
 const validateCreateOrder = [
   body('vehicle_category_id').isInt({ min: 1 }).withMessage('Valid vehicle category required'),
   body('start_coordinate')
@@ -55,7 +50,6 @@ const validateCreateOrder = [
   handleValidation,
 ];
 
-// ─── Charge Payment ───────────────────────────────────────────────────────────
 const validatePayment = [
   body('order_id').isInt({ min: 1 }).withMessage('Valid order_id required'),
   body('amount').isFloat({ min: 0.5 }).withMessage('Valid amount required (min 0.5)'),
@@ -63,13 +57,11 @@ const validatePayment = [
   handleValidation,
 ];
 
-// ─── Driver Accept Order ──────────────────────────────────────────────────────
 const validateAcceptOrder = [
   body('order_id').isInt({ min: 1 }).withMessage('Valid order_id required'),
   handleValidation,
 ];
 
-// ─── Update Password ──────────────────────────────────────────────────────────
 const validateUpdatePassword = [
   body('current_password').notEmpty().withMessage('Current password required'),
   body('new_password').isLength({ min: 6 }).withMessage('New password must be at least 6 characters'),

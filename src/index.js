@@ -18,10 +18,9 @@ const { Driver } = require('./models');
 const { apiLogger } = require('./middleware/logger');
 
 const app = express();
-app.set('trust proxy', 1); // Nginx reverse proxy ke liye
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 
-// ─── Socket.io Setup ──────────────────────────────────────────────────────────
 const io = new Server(server, {
   cors: {
     origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*',
@@ -29,7 +28,6 @@ const io = new Server(server, {
   },
 });
 
-// Redis adapter — multiple PM2 instances ke beech Socket.io sync karo
 const { pubClient, subClient } = createPubSubClients();
 Promise.all([pubClient.connect?.() ?? Promise.resolve(), subClient.connect?.() ?? Promise.resolve()])
   .then(() => {
@@ -40,7 +38,6 @@ Promise.all([pubClient.connect?.() ?? Promise.resolve(), subClient.connect?.() ?
 
 setupSocket(io);
 
-// ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -53,8 +50,8 @@ app.use(helmet({
       workerSrc: ["'self'", "blob:"],
     },
   },
-}));                                        // Security headers
-app.use(morgan('combined'));                // Request logging
+}));
+app.use(morgan('combined'));
 app.use(cors({
   origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
@@ -62,15 +59,12 @@ app.use(cors({
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-// Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Serve admin panel
 app.use('/admin', express.static(path.join(__dirname, '../public/admin')));
 app.get('/admin/en', (req, res) => res.redirect('/admin/en/'));
 app.get('/admin', (req, res) => res.redirect('/admin/en/'));
 
-// ─── Block Suspicious Requests ────────────────────────────────────────────────
 const BLOCKED_PATTERNS = [
   /\.php$/i,
   /wp-content/i,
@@ -93,34 +87,26 @@ app.use((req, res, next) => {
   next();
 });
 
-// Attach io to every request (so controllers can emit events)
 app.use((req, res, next) => {
   req.io = io;
   next();
 });
-
-// ─── API Request / Response Logger ───────────────────────────────────────────
 app.use(apiLogger);
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/webservice', routes);
 app.use('/api/admin', adminRoutes);
 
-// Health check
 app.get('/health', (req, res) => res.json({ status: 'OK', message: 'GatsbyRide API is running' }));
 
-// 404 handler
 app.use((req, res) => {
   res.status(404).json({ status: false, message: 'Route not found' });
 });
 
-// Error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ status: false, message: err.message || 'Internal server error' });
 });
 
-// ─── Database + Server Start ──────────────────────────────────────────────────
 const PORT = process.env.PORT || 8000;
 
 sequelize
@@ -131,7 +117,6 @@ sequelize
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`🔌 Socket.io ready`);
 
-      // Server restart ke baad MySQL se online drivers ko Redis mein repopulate karo
       try {
         const onlineDrivers = await Driver.findAll({
           where: { order_status: 'online', status: 1 },

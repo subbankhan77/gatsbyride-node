@@ -19,23 +19,16 @@ const paymentController = require('../controllers/paymentController');
 
 const customerAuth = [verifyToken('customer'), checkActiveStatus];
 const driverAuth = [verifyToken('driver'), checkActiveStatus];
-const driverOnboard = [verifyToken('driver')]; // No active check during onboarding
+const driverOnboard = [verifyToken('driver')];
 
-// General rate limit — sabhi routes pe
 router.use(apiLimiter);
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  PUBLIC ROUTES
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Auth — rate limited
 router.post('/login',          loginLimiter,    validateLogin,              authController.customerLogin);
 router.post('/logindriver',    loginLimiter,    validateLogin,              authController.driverLogin);
 router.post('/user_register',  registerLimiter, validateCustomerRegister,   authController.customerRegister);
 router.post('/driver_register',registerLimiter, validateDriverRegister,     authController.driverRegister);
 router.post('/driver/signup',  registerLimiter,                             authController.signUpDriver);
 
-// Public data
 router.get('/vehicleCategories',         authController.vehicleCategories);
 router.get('/order/reject/reason/list',   orderController.rejectReasonList);
 router.post('/rating/list',               orderController.getRatingList);
@@ -44,7 +37,6 @@ router.post('/priceCategory',             orderController.priceCategory);
 router.get('/getAllDriverLocation',        orderController.getAllDriverLocations);
 router.get('/distance/:pickup',           orderController.getDrivingDistanceRoute);
 
-// File uploads — auth required + rate limited
 router.post('/upload',
   driverOnboard,
   uploadLimiter,
@@ -64,9 +56,6 @@ router.post('/customerUpload',
   }
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  CUSTOMER ROUTES (Authenticated)
-// ─────────────────────────────────────────────────────────────────────────────
 router.get('/user_profile',        customerAuth,                                       profileController.getCustomerProfile);
 router.post('/customer/create/profile', customerAuth,                                  profileController.customerCreateProfile);
 router.post('/edit_profile_user',  customerAuth, upload.single('image'),               profileController.updateCustomerProfile);
@@ -91,9 +80,6 @@ router.post('/update/fcm/token',   customerAuth,                                
 router.get('/logout',              customerAuth,                                       authController.customerLogout);
 router.delete('/customer/account/delete', customerAuth,                                authController.deleteCustomer);
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  DRIVER ONBOARDING (JWT only, no active check)
-// ─────────────────────────────────────────────────────────────────────────────
 router.post('/driver/profile/details/add', driverOnboard, upload.fields([
   { name: 'profile_photo', maxCount: 1 },
   { name: 'id_proof', maxCount: 1 },
@@ -106,9 +92,6 @@ router.post('/driver/vehicle/details/add', driverOnboard, upload.fields([
 
 router.post('/driver/bank/details/add', driverOnboard, profileController.addDriverBankDetails);
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  DRIVER ROUTES (Authenticated + Active)
-// ─────────────────────────────────────────────────────────────────────────────
 router.get('/driver/profile',          driverAuth,                                 profileController.getDriverProfile);
 router.post('/driver/update-profile',  driverAuth, upload.single('image'),         profileController.updateDriverProfile);
 router.post('/driver/update-coordinate', driverAuth,                               profileController.updateDriverCoordinate);
@@ -132,21 +115,12 @@ router.post('/driver/update/fcm/token',     driverAuth,                         
 router.get('/driver/logout',                driverAuth,                            authController.driverLogout);
 router.delete('/driver/account/delete',     driverAuth,                            authController.deleteDriver);
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  ROUTE POLYLINE & SURGE
-// ─────────────────────────────────────────────────────────────────────────────
 router.get('/order/route/:order_id', orderController.getOrderRoute);
 router.get('/surge/check',           orderController.getSurgeInfo);
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  CHAT HISTORY
-// ─────────────────────────────────────────────────────────────────────────────
 router.get('/order/chat/:order_id', verifyToken('customer'), orderController.getChatHistory);
 router.get('/driver/order/chat/:order_id', verifyToken('driver'), orderController.getChatHistory);
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  SHARED RATING ROUTES
-// ─────────────────────────────────────────────────────────────────────────────
 router.post('/order/rating',        verifyToken('customer'), orderController.submitRating);
 router.post('/driver/order/rating', verifyToken('driver'),   orderController.submitRating);
 

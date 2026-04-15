@@ -20,13 +20,6 @@ function initFirebase() {
 
 initFirebase();
 
-/**
- * Send FCM push notification to a single device
- * @param {string} fcmToken - Device FCM token
- * @param {string} title - Notification title
- * @param {string} body - Notification body
- * @param {object} data - Extra data payload
- */
 async function sendNotification(fcmToken, title, body, data = {}) {
   if (!firebaseApp || !fcmToken) return;
 
@@ -47,9 +40,6 @@ async function sendNotification(fcmToken, title, body, data = {}) {
   }
 }
 
-/**
- * Send FCM to multiple tokens
- */
 async function sendMulticastNotification(tokens, title, body, data = {}) {
   if (!firebaseApp || !tokens || tokens.length === 0) return;
 

@@ -7,7 +7,6 @@ const {
 } = require('../models');
 const { apiResponse } = require('../utils/helpers');
 
-// ─── Admin Login ──────────────────────────────────────────────────────────────
 exports.login = async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -35,7 +34,6 @@ exports.login = async (req, res) => {
   }
 };
 
-// ─── Dashboard Stats ──────────────────────────────────────────────────────────
 exports.dashboard = async (req, res) => {
   try {
     const [
@@ -72,10 +70,6 @@ exports.dashboard = async (req, res) => {
     return apiResponse(res, 500, false, err.message);
   }
 };
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  CUSTOMER MANAGEMENT
-// ═════════════════════════════════════════════════════════════════════════════
 
 exports.getCustomers = async (req, res) => {
   try {
@@ -142,10 +136,6 @@ exports.toggleCustomerStatus = async (req, res) => {
     return apiResponse(res, 500, false, err.message);
   }
 };
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  DRIVER MANAGEMENT
-// ═════════════════════════════════════════════════════════════════════════════
 
 exports.getDrivers = async (req, res) => {
   try {
@@ -230,7 +220,6 @@ exports.toggleDriverVerification = async (req, res) => {
   }
 };
 
-// Get all online drivers with live location (for map tracking)
 exports.getOnlineDrivers = async (req, res) => {
   try {
     const drivers = await Driver.findAll({
@@ -243,10 +232,6 @@ exports.getOnlineDrivers = async (req, res) => {
     return apiResponse(res, 500, false, err.message);
   }
 };
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  ORDER MANAGEMENT
-// ═════════════════════════════════════════════════════════════════════════════
 
 exports.getOrders = async (req, res) => {
   try {
@@ -293,10 +278,6 @@ exports.getOrder = async (req, res) => {
     return apiResponse(res, 500, false, err.message);
   }
 };
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  VEHICLE CATEGORY MANAGEMENT
-// ═════════════════════════════════════════════════════════════════════════════
 
 exports.getVehicleCategories = async (req, res) => {
   try {
@@ -357,10 +338,6 @@ exports.deleteVehicleCategory = async (req, res) => {
   }
 };
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  ADMIN USER MANAGEMENT
-// ═════════════════════════════════════════════════════════════════════════════
-
 exports.getAdmins = async (req, res) => {
   try {
     const admins = await AdminUser.findAll({
@@ -414,10 +391,6 @@ exports.deleteAdmin = async (req, res) => {
   }
 };
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  CANCELLATION REASONS
-// ═════════════════════════════════════════════════════════════════════════════
-
 exports.getReasons = async (req, res) => {
   try {
     const reasons = await Reason.findAll({ order: [['created_at', 'DESC']] });
@@ -458,10 +431,6 @@ exports.deleteReason = async (req, res) => {
   }
 };
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  ABOUT US
-// ═════════════════════════════════════════════════════════════════════════════
-
 exports.getAboutUs = async (req, res) => {
   try {
     const about = await AboutUs.findOne();
@@ -485,10 +454,6 @@ exports.updateAboutUs = async (req, res) => {
   }
 };
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  ORDER SETTINGS
-// ═════════════════════════════════════════════════════════════════════════════
-
 exports.getSettings = async (req, res) => {
   try {
     const settings = await OrderSetting.findAll();
@@ -500,7 +465,7 @@ exports.getSettings = async (req, res) => {
 
 exports.updateSettings = async (req, res) => {
   try {
-    const { settings } = req.body; // [{ key, value }]
+    const { settings } = req.body;
     for (const s of settings) {
       await OrderSetting.upsert({ key: s.key, value: s.value });
     }
@@ -510,7 +475,6 @@ exports.updateSettings = async (req, res) => {
   }
 };
 
-// ─── Admin Logout ─────────────────────────────────────────────────────────────
 exports.logout = async (req, res) => {
   try {
     await req.admin.update({ remember_token: null });

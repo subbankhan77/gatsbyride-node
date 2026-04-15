@@ -1,7 +1,6 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
-// ─── Customer Model ───────────────────────────────────────────────────────────
 const Customer = sequelize.define('Customer', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   name: DataTypes.STRING,
@@ -34,7 +33,6 @@ const Customer = sequelize.define('Customer', {
   deletedAt: 'deleted_at',
 });
 
-// ─── Driver Model ─────────────────────────────────────────────────────────────
 const Driver = sequelize.define('Driver', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   name: DataTypes.STRING,
@@ -88,7 +86,6 @@ const Driver = sequelize.define('Driver', {
   deletedAt: 'deleted_at',
 });
 
-// ─── VehicleCategory Model ────────────────────────────────────────────────────
 const VehicleCategory = sequelize.define('VehicleCategory', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   category: DataTypes.STRING,
@@ -113,7 +110,6 @@ const VehicleCategory = sequelize.define('VehicleCategory', {
   deletedAt: 'deleted_at',
 });
 
-// ─── Order Model ──────────────────────────────────────────────────────────────
 const Order = sequelize.define('Order', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   driver_id: DataTypes.INTEGER,
@@ -137,11 +133,7 @@ const Order = sequelize.define('Order', {
   pending_amount: DataTypes.DECIMAL(10, 2),
   new_total: DataTypes.DECIMAL(10, 2),
   grand_total: DataTypes.DECIMAL(10, 2),
-  // Surge pricing multiplier (1.00 = normal, 1.50 = 1.5x surge)
-  // ALTER TABLE orders ADD COLUMN surge_multiplier DECIMAL(4,2) DEFAULT 1.00;
   surge_multiplier: { type: DataTypes.DECIMAL(4, 2), defaultValue: 1.00 },
-  // Encoded polyline from Google Directions API for road-following route on map
-  // ALTER TABLE orders ADD COLUMN route_polyline LONGTEXT NULL;
   route_polyline: DataTypes.TEXT('long'),
 }, {
   tableName: 'orders',
@@ -150,7 +142,6 @@ const Order = sequelize.define('Order', {
   updatedAt: 'updated_at',
 });
 
-// ─── Rating Model ─────────────────────────────────────────────────────────────
 const Rating = sequelize.define('Rating', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   sender_id: DataTypes.INTEGER,
@@ -158,7 +149,7 @@ const Rating = sequelize.define('Rating', {
   order_id: DataTypes.INTEGER,
   rating: DataTypes.TINYINT,
   review: DataTypes.TEXT,
-  type: DataTypes.TINYINT,  // 1=customer→driver, 2=driver→customer
+  type: DataTypes.TINYINT,
   status: DataTypes.BOOLEAN,
 }, {
   tableName: 'rating',
@@ -167,7 +158,6 @@ const Rating = sequelize.define('Rating', {
   updatedAt: 'updated_at',
 });
 
-// ─── OrderReject Model ────────────────────────────────────────────────────────
 const OrderReject = sequelize.define('OrderReject', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   driver_id: DataTypes.INTEGER,
@@ -181,7 +171,6 @@ const OrderReject = sequelize.define('OrderReject', {
   updatedAt: 'updated_at',
 });
 
-// ─── Reasons Model ────────────────────────────────────────────────────────────
 const Reason = sequelize.define('Reason', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   reason: DataTypes.STRING,
@@ -193,7 +182,6 @@ const Reason = sequelize.define('Reason', {
   updatedAt: 'updated_at',
 });
 
-// ─── BankDetails Model ────────────────────────────────────────────────────────
 const BankDetails = sequelize.define('BankDetails', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   driver_id: DataTypes.INTEGER,
@@ -210,7 +198,6 @@ const BankDetails = sequelize.define('BankDetails', {
   updatedAt: 'updated_at',
 });
 
-// ─── Payment Model ────────────────────────────────────────────────────────────
 const Payment = sequelize.define('Payment', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   driver_id: DataTypes.INTEGER,
@@ -226,15 +213,13 @@ const Payment = sequelize.define('Payment', {
   updatedAt: 'updated_at',
 });
 
-// ─── UserCardDetails Model ────────────────────────────────────────────────────
-// SECURITY: card_number/expiry kabhi store nahi karna — Stripe PM ID use karo
 const UserCardDetails = sequelize.define('UserCardDetails', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   user_id: DataTypes.INTEGER,
-  stripe_payment_method_id: DataTypes.STRING,   // pm_xxxx — Stripe se lo
-  last_four: DataTypes.STRING(4),                // sirf last 4 digits
+  stripe_payment_method_id: DataTypes.STRING,
+  last_four: DataTypes.STRING(4),
   card_holder_name: DataTypes.STRING,
-  card_type: DataTypes.STRING,                   // visa, mastercard, amex, etc.
+  card_type: DataTypes.STRING,
   status: DataTypes.TINYINT,
 }, {
   tableName: 'user_card_details',
@@ -243,7 +228,6 @@ const UserCardDetails = sequelize.define('UserCardDetails', {
   updatedAt: 'updated_at',
 });
 
-// ─── ChatMessage Model ────────────────────────────────────────────────────────
 const ChatMessage = sequelize.define('ChatMessage', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   order_id: DataTypes.INTEGER,
@@ -259,7 +243,6 @@ const ChatMessage = sequelize.define('ChatMessage', {
   updatedAt: 'updated_at',
 });
 
-// ─── ContactUs Model ──────────────────────────────────────────────────────────
 const ContactUs = sequelize.define('ContactUs', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   name: DataTypes.STRING,
@@ -272,7 +255,6 @@ const ContactUs = sequelize.define('ContactUs', {
   updatedAt: 'updated_at',
 });
 
-// ─── AboutUs Model ────────────────────────────────────────────────────────────
 const AboutUs = sequelize.define('AboutUs', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   content: DataTypes.TEXT,
@@ -284,7 +266,6 @@ const AboutUs = sequelize.define('AboutUs', {
   updatedAt: 'updated_at',
 });
 
-// ─── OrderSetting Model ───────────────────────────────────────────────────────
 const OrderSetting = sequelize.define('OrderSetting', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   key: DataTypes.STRING,
@@ -296,7 +277,6 @@ const OrderSetting = sequelize.define('OrderSetting', {
   updatedAt: 'updated_at',
 });
 
-// ─── Notification Model ───────────────────────────────────────────────────────
 const Notification = sequelize.define('Notification', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   user_id: DataTypes.INTEGER,
@@ -308,7 +288,6 @@ const Notification = sequelize.define('Notification', {
   updatedAt: 'updated_at',
 });
 
-// ─── User (Admin) Model ───────────────────────────────────────────────────────
 const AdminUser = sequelize.define('AdminUser', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   name: DataTypes.STRING,
@@ -323,7 +302,6 @@ const AdminUser = sequelize.define('AdminUser', {
   updatedAt: 'updated_at',
 });
 
-// ─── Associations ─────────────────────────────────────────────────────────────
 Driver.belongsTo(VehicleCategory, { foreignKey: 'vehicle_category_id' });
 VehicleCategory.hasMany(Driver, { foreignKey: 'vehicle_category_id' });
 

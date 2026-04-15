@@ -2,20 +2,16 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET);
 const { UserCardDetails, Payment, Order } = require('../models');
 const { apiResponse } = require('../utils/helpers');
 
-// ─── Add Card ─────────────────────────────────────────────────────────────────
-// Frontend Stripe.js se payment_method_id bheje — raw card kabhi server pe nahi aana chahiye
 exports.addCard = async (req, res) => {
   try {
     const { payment_method_id, card_holder_name } = req.body;
     if (!payment_method_id) return apiResponse(res, 422, false, 'payment_method_id required');
 
-    // Stripe se card details fetch karo (last4, brand) — raw number nahi store karna
     const pm = await stripe.paymentMethods.retrieve(payment_method_id);
     if (!pm || pm.type !== 'card') {
       return apiResponse(res, 422, false, 'Invalid payment method');
     }
 
-    // Duplicate check
     const existing = await UserCardDetails.findOne({
       where: { user_id: req.user.id, stripe_payment_method_id: payment_method_id, status: 1 },
     });
@@ -41,7 +37,6 @@ exports.addCard = async (req, res) => {
   }
 };
 
-// ─── List Cards ───────────────────────────────────────────────────────────────
 exports.listCards = async (req, res) => {
   try {
     const cards = await UserCardDetails.findAll({
@@ -54,7 +49,6 @@ exports.listCards = async (req, res) => {
   }
 };
 
-// ─── Delete Card ──────────────────────────────────────────────────────────────
 exports.deleteCard = async (req, res) => {
   try {
     const { card_id } = req.body;
@@ -68,30 +62,26 @@ exports.deleteCard = async (req, res) => {
   }
 };
 
-// ─── Charge Payment via Stripe ────────────────────────────────────────────────
 exports.chargePayment = async (req, res) => {
   try {
     const { order_id, amount, payment_method_id } = req.body;
 
     const order = await Order.findOne({
-      where: { id: order_id, customer_id: req.user.id }, // sirf apna order pay kar sakta hai
+      where: { id: order_id, customer_id: req.user.id },
     });
     if (!order) return apiResponse(res, 404, false, 'Order not found');
 
-    // Amount validate karo — customer apni marzi ka amount charge nahi kar sakta
     const expectedAmount = parseFloat(order.grand_total || order.total || 0);
     const requestedAmount = parseFloat(amount);
     if (Math.abs(requestedAmount - expectedAmount) > 0.01) {
       return apiResponse(res, 422, false, `Invalid amount. Expected: ${expectedAmount}`);
     }
 
-    // Duplicate payment check
     const existing = await Payment.findOne({ where: { order_id, status: 1 } });
     if (existing) return apiResponse(res, 409, false, 'Payment already done for this order');
 
-    // Create Stripe PaymentIntent
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(requestedAmount * 100), // cents mein
+      amount: Math.round(requestedAmount * 100),
       currency: 'usd',
       payment_method: payment_method_id,
       confirm: true,
@@ -107,7 +97,7 @@ exports.chargePayment = async (req, res) => {
     });
 
     if (paymentIntent.status === 'succeeded') {
-      await order.update({ status: 7 }); // COMPLETE
+      await order.update({ status: 7 });
     }
 
     return apiResponse(res, 200, true, 'Payment processed', { payment, paymentIntent });
@@ -116,7 +106,6 @@ exports.chargePayment = async (req, res) => {
   }
 };
 
-// ─── Driver Payment Confirmation ──────────────────────────────────────────────
 exports.paymentConfirmation = async (req, res) => {
   try {
     const { order_id, tip } = req.body;
@@ -134,7 +123,7 @@ exports.paymentConfirmation = async (req, res) => {
       status: 1,
     });
 
-    await order.update({ status: 7 }); // COMPLETE
+    await order.update({ status: 7 });
 
     return apiResponse(res, 200, true, 'Payment confirmed', payment);
   } catch (err) {

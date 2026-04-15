@@ -1,7 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { Customer, Driver } = require('../models');
 
-// Generic JWT verify middleware - specify guard: 'customer' or 'driver'
 const verifyToken = (guard) => async (req, res, next) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -28,7 +27,6 @@ const verifyToken = (guard) => async (req, res, next) => {
       return res.status(401).json({ status: false, message: 'User not found' });
     }
 
-    // Validate token matches DB (same as Laravel JWT middleware)
     if (user.api_token && user.api_token !== token) {
       return res.status(422).json({ status: false, message: 'Token mismatch' });
     }
@@ -41,7 +39,6 @@ const verifyToken = (guard) => async (req, res, next) => {
   }
 };
 
-// Check if account is active (not suspended)
 const checkActiveStatus = (req, res, next) => {
   if (!req.user || req.user.status === 0) {
     return res.status(403).json({ status: false, message: 'Your account is suspended' });
@@ -49,7 +46,6 @@ const checkActiveStatus = (req, res, next) => {
   next();
 };
 
-// Auth for admin (web)
 const verifyAdmin = async (req, res, next) => {
   try {
     const authHeader = req.headers['authorization'];

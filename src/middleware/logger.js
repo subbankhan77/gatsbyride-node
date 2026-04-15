@@ -1,11 +1,3 @@
-/**
- * Request / Response / Socket Event Logger
- *
- * API calls  → [API REQ] / [API RES]
- * Socket IN  → [SOCKET ←]
- * Socket OUT → [SOCKET →]
- */
-
 const SENSITIVE_KEYS = ['password', 'token', 'fcm_token', 'secret'];
 
 function maskSensitive(obj) {
@@ -29,7 +21,6 @@ function fmt(data) {
   }
 }
 
-// ─── HTTP API Logger Middleware ───────────────────────────────────────────────
 function apiLogger(req, res, next) {
   const start = Date.now();
   const { method, originalUrl } = req;
@@ -41,7 +32,6 @@ function apiLogger(req, res, next) {
   if (query) console.log(`  query : ${fmt(query)}`);
   if (body)  console.log(`  body  : ${fmt(body)}`);
 
-  // Response intercept
   const originalJson = res.json.bind(res);
   res.json = function (data) {
     const ms = Date.now() - start;
@@ -53,11 +43,9 @@ function apiLogger(req, res, next) {
   next();
 }
 
-// ─── Socket Event Logger ──────────────────────────────────────────────────────
 function attachSocketLogger(socket) {
   const uid = `user:${socket.userId}`;
 
-  // Incoming — every event from this client
   socket.onAny((event, ...args) => {
     console.log(`\n[SOCKET ←] ${event} | ${uid}`);
     args.forEach((arg, i) => {
@@ -65,10 +53,8 @@ function attachSocketLogger(socket) {
     });
   });
 
-  // Outgoing — wrap socket.emit (direct sends to this client)
   const _emit = socket.emit.bind(socket);
   socket.emit = function (event, ...args) {
-    // skip internal socket.io events
     if (!event.startsWith('$') && event !== 'connect' && event !== 'disconnect') {
       console.log(`\n[SOCKET →] ${event} | ${uid}`);
       args.forEach((arg, i) => {

@@ -210,7 +210,6 @@ exports.setDriverStatus = async (req, res) => {
     console.log(`Driver ${driverId} set-status: received="${status}" isOnline=${isOnline} lat=${latitude} lng=${longitude}`);
 
     if (isOnline) {
-      // Agar pending offline grace timer hai toh cancel karo
       const driverIdStr = String(driverId);
       if (offlineTimers.has(driverIdStr)) {
         clearTimeout(offlineTimers.get(driverIdStr));
