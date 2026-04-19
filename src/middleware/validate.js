@@ -29,8 +29,8 @@ const validateDriverRegister = [
 ];
 
 const validateLogin = [
-  body('email').isEmail().withMessage('Valid email required').normalizeEmail(),
-  body('password').notEmpty().withMessage('Password is required'),
+  body('email').if(body('login_type').not().equals('social')).isEmail().withMessage('Valid email required').normalizeEmail(),
+  body('password').if(body('login_type').not().equals('social')).notEmpty().withMessage('Password is required'),
   handleValidation,
 ];
 

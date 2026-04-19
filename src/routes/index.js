@@ -12,6 +12,7 @@ const {
   validateAcceptOrder,
 } = require('../middleware/validate');
 
+
 const authController = require('../controllers/authController');
 const profileController = require('../controllers/profileController');
 const orderController = require('../controllers/orderController');
@@ -106,6 +107,7 @@ router.post('/driver/order/reject',    driverAuth,                              
 router.post('/driver/requests/new',    driverAuth,                                 orderController.driverNewRequests);
 router.post('/driver/accept-order',    driverAuth, validateAcceptOrder,            orderController.driverAcceptOrder);
 router.post('/driver/update/end/trip', driverAuth,                                 orderController.updateEndTrip);
+router.post('/driver/order/receipt',   driverAuth,                                 orderController.driverOrderReceipt);
 
 router.post('/driver/set-status',      driverAuth,                                 profileController.setDriverStatus);
 router.get('/driver/get-status',       driverAuth,                                 profileController.getDriverStatus);

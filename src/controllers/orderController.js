@@ -1,7 +1,7 @@
 const { Op } = require('sequelize');
 const {
   Order, Driver, Customer, VehicleCategory, Rating,
-  OrderReject, Reason, ChatMessage,
+  OrderReject, Reason, ChatMessage, Payment,
 } = require('../models');
 const { sendNotification } = require('../utils/fcm');
 const {
@@ -611,6 +611,76 @@ exports.getChatHistory = async (req, res) => {
     });
 
     return apiResponse(res, 200, true, 'Chat history', messages);
+  } catch (err) {
+    return apiResponse(res, 500, false, err.message);
+  }
+};
+
+exports.driverOrderReceipt = async (req, res) => {
+  try {
+    const { id, time, distance } = req.body;
+
+    const order = await Order.findByPk(id, {
+      include: [{ model: Customer }, { model: VehicleCategory }],
+    });
+    if (!order) return apiResponse(res, 404, false, 'Order not found');
+
+    const actualMinutes = parseFloat(time) || 0;
+    const actualDistance = parseFloat(distance) || 0;
+    const category = order.VehicleCategory;
+
+    let extraTimeMin = 0;
+    let extraTimeFare = 0;
+    if (order.estimated_time && actualMinutes > order.estimated_time) {
+      extraTimeMin = parseFloat((actualMinutes - order.estimated_time).toFixed(2));
+      const pricePerMin = parseFloat(category?.price_min) || 0;
+      extraTimeFare = parseFloat((extraTimeMin * pricePerMin).toFixed(2));
+    }
+
+    let extraDistance = 0;
+    let extraDistanceFare = 0;
+    if (actualDistance > parseFloat(order.distance)) {
+      extraDistance = parseFloat((actualDistance - parseFloat(order.distance)).toFixed(2));
+      const pricePerKm = parseFloat(category?.price_km) || 0;
+      extraDistanceFare = parseFloat((extraDistance * pricePerKm).toFixed(2));
+    }
+
+    const grandTotal = parseFloat((parseFloat(order.total) + extraDistanceFare + extraTimeFare).toFixed(2));
+
+    const tip = parseFloat((await Payment.findOne({ where: { order_id: id } }))?.tip || 0);
+    const pendingAmount = parseFloat(order.Customer?.pending_amount || 0);
+    const newTotal = parseFloat((grandTotal + pendingAmount).toFixed(2));
+
+    await order.update({
+      actual_distance: actualDistance,
+      actual_time: actualMinutes,
+      grand_total: grandTotal + tip,
+      new_total: newTotal,
+    });
+
+    return apiResponse(res, 200, true, 'Order receipt', {
+      id: String(order.id),
+      driver_id: String(order.driver_id),
+      distance: String(order.distance),
+      total: String(order.total),
+      grand_total: (grandTotal + tip).toFixed(2),
+      extra_distance: extraDistance.toFixed(2),
+      extra_distance_price: extraDistanceFare.toFixed(2),
+      extra_time: extraTimeMin.toFixed(2),
+      extra_time_price: extraTimeFare === 0 ? '0' : extraTimeFare.toFixed(2),
+      tip: tip.toFixed(2),
+      order_time: order.order_time,
+      start_time: order.start_time,
+      end_time: order.end_time,
+      status: String(order.status),
+      vehicle_category_id: order.vehicle_category_id,
+      image: order.Customer?.image || '-',
+      user_name: order.Customer?.name || '-',
+      user_phone: order.Customer?.phone || '-',
+      payment_method: order.payment_method,
+      pending_amount: pendingAmount.toFixed(2),
+      new_total: newTotal.toFixed(2),
+    });
   } catch (err) {
     return apiResponse(res, 500, false, err.message);
   }
