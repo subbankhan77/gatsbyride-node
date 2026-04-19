@@ -619,7 +619,8 @@ exports.getChatHistory = async (req, res) => {
 exports.driverOrderReceipt = async (req, res) => {
   try {
     const { id, time, distance } = req.body;
-
+    console.log('RECEIPT BODY:', req.body); 
+    console.log('RECEIPT USER:', req.user);
     const order = await Order.findByPk(id, {
       include: [{ model: Customer }, { model: VehicleCategory }],
     });
