@@ -13,7 +13,6 @@ const Customer = sequelize.define('Customer', {
   country: DataTypes.STRING,
   login_type: { type: DataTypes.ENUM('app', 'social'), defaultValue: 'app' },
   social_id: DataTypes.STRING,
-  social_type: DataTypes.ENUM('google', 'apple'),
   firebase_uid: DataTypes.STRING,
   fcm_token: DataTypes.TEXT,
   device_type: DataTypes.STRING,
