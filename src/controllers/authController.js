@@ -5,39 +5,55 @@ const { ORDER_STATUS } = require('../config/constants');
 
 exports.customerLogin = async (req, res) => {
   try {
-    const { email, password, fcm_token, device_type, login_type, social_id } = req.body;
+    const { email, password, fcm_token, device_type, login_type, social_id, first_name, last_name, country } = req.body;
 
     let customer;
-    if (login_type === 'social' && social_id) {
-      customer = await Customer.findOne({ where: { social_id } });
-      if (!customer) {
+
+    if (login_type === 'app') {
+      customer = await Customer.findOne({ where: { email } });
+      if (!customer) return apiResponse(res, 422, false, 'Account does not exist!');
+
+      const valid = await bcrypt.compare(password, customer.password);
+      if (!valid) return apiResponse(res, 422, false, 'Invalid password');
+
+      if (customer.status === 0) return apiResponse(res, 200, true, 'Account suspended');
+
+      const token = generateToken({ id: customer.id, guard: 'customer' });
+      await customer.update({ api_token: token, fcm_token, device_type });
+
+      return apiResponse(res, 200, true, 'Login successfully', { token, user: customer });
+    } else {
+      // Google / Apple social login
+      customer = await Customer.findOne({ where: { social_id, login_type } });
+
+      if (customer) {
+        if (customer.status === 0) return apiResponse(res, 200, true, 'Account suspended');
+
+        const token = generateToken({ id: customer.id, guard: 'customer' });
+        await customer.update({ api_token: token, fcm_token, device_type });
+
+        return apiResponse(res, 200, true, 'Login successfully', { token, user: customer });
+      } else {
+        const name = `${first_name || ''} ${last_name || ''}`.trim();
         customer = await Customer.create({
-          name: req.body.name || '',
+          name,
+          first_name: first_name || '',
+          last_name: last_name || '',
           email: email || null,
           social_id,
-          login_type: 'social',
+          login_type,
+          fcm_token: fcm_token || null,
+          device_type: device_type || null,
+          country: country || null,
           status: 1,
         });
-      }
-    } else {
-      customer = await Customer.findOne({ where: { email } });
-      if (!customer) {
-        return apiResponse(res, 422, false, 'Email not found');
-      }
-      const valid = await bcrypt.compare(password, customer.password);
-      if (!valid) {
-        return apiResponse(res, 422, false, 'Invalid password');
+
+        const token = generateToken({ id: customer.id, guard: 'customer' });
+        await customer.update({ api_token: token });
+
+        return apiResponse(res, 200, true, 'Login successfully', { token, user: customer });
       }
     }
-
-    if (customer.status === 0) {
-      return apiResponse(res, 403, false, 'Your account is suspended');
-    }
-
-    const token = generateToken({ id: customer.id, guard: 'customer' });
-    await customer.update({ api_token: token, fcm_token, device_type });
-
-    return apiResponse(res, 200, true, 'Login successful', { token, user: customer });
   } catch (err) {
     return apiResponse(res, 500, false, err.message);
   }
