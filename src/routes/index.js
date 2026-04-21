@@ -34,6 +34,8 @@ router.post('/password/forgot',          authController.forgotPassword);
 router.post('/otp/verify',               authController.verifyOtp);
 router.post('/password/reset',           authController.driverResetPassword);
 router.post('/customer/password/reset',  authController.customerResetPassword);
+router.post('/reset-password-user',      authController.resetPassword);
+router.post('/reset-password-driver',    authController.resetPassword);
 
 router.get('/vehicleCategories',         authController.vehicleCategories);
 router.get('/order/reject/reason/list',   orderController.rejectReasonList);

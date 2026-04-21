@@ -258,6 +258,35 @@ exports.deleteDriver = async (req, res) => {
   }
 };
 
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email, type } = req.body;
+    const newPassword = Math.random().toString(36).slice(-8);
+    const hashed = await bcrypt.hash(newPassword, 10);
+
+    if (type === 'user') {
+      const user = await Customer.findOne({ where: { email } });
+      if (!user) return apiResponse(res, 200, false, 'Email not found');
+      await user.update({ password: hashed });
+    } else {
+      const user = await Driver.findOne({ where: { email } });
+      if (!user) return apiResponse(res, 200, false, 'Email not found');
+      await user.update({ password: hashed });
+    }
+
+    await mailer.sendMail({
+      from: process.env.MAIL_FROM,
+      to: email,
+      subject: 'Your New Password',
+      text: `Your new password is: ${newPassword}`,
+    });
+
+    return apiResponse(res, 200, true, 'Check your email');
+  } catch (err) {
+    return apiResponse(res, 500, false, err.message);
+  }
+};
+
 exports.forgotPassword = async (req, res) => {
   try {
     const { email, type } = req.body;
