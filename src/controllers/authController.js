@@ -1,7 +1,15 @@
 const bcrypt = require('bcryptjs');
+const nodemailer = require('nodemailer');
 const { Customer, Driver, VehicleCategory } = require('../models');
 const { generateToken, apiResponse } = require('../utils/helpers');
 const { ORDER_STATUS } = require('../config/constants');
+
+const mailer = nodemailer.createTransport({
+  host: process.env.MAIL_HOST,
+  port: Number(process.env.MAIL_PORT) || 465,
+  secure: Number(process.env.MAIL_PORT) === 465,
+  auth: { user: process.env.MAIL_USER, pass: process.env.MAIL_PASS },
+});
 
 exports.customerLogin = async (req, res) => {
   try {
@@ -257,17 +265,20 @@ exports.forgotPassword = async (req, res) => {
 
     const otp = String(Math.floor(1000 + Math.random() * 9000));
 
-    if (type === 'Driver') {
-      const user = await Driver.findOne({ where: { email } });
-      if (!user) return apiResponse(res, 200, false, 'Email not found');
-      await user.update({ otp });
-      return apiResponse(res, 200, true, 'Please check your email we have sent code.' + otp);
-    } else {
-      const user = await Customer.findOne({ where: { email } });
-      if (!user) return apiResponse(res, 200, false, 'Email not found');
-      await user.update({ otp });
-      return apiResponse(res, 200, true, 'Please check your email we have sent code.' + otp);
-    }
+    const Model = type === 'Driver' ? Driver : Customer;
+    const user = await Model.findOne({ where: { email } });
+    if (!user) return apiResponse(res, 200, false, 'Email not found');
+
+    await user.update({ otp });
+
+    await mailer.sendMail({
+      from: process.env.MAIL_FROM,
+      to: email,
+      subject: 'Reset Password Notification',
+      text: `You are receiving this email because we received a password reset request for your account. If this was a mistake, just ignore this email and nothing will happen. Please use this verification code ${otp} to recover your password.`,
+    });
+
+    return apiResponse(res, 200, true, 'Please check your email we have sent code.');
   } catch (err) {
     return apiResponse(res, 500, false, err.message);
   }
