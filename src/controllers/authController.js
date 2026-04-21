@@ -249,3 +249,75 @@ exports.deleteDriver = async (req, res) => {
     return apiResponse(res, 500, false, err.message);
   }
 };
+
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email, type } = req.body;
+    if (!email) return apiResponse(res, 200, false, 'Email is required');
+
+    const otp = String(Math.floor(1000 + Math.random() * 9000));
+
+    if (type === 'Driver') {
+      const user = await Driver.findOne({ where: { email } });
+      if (!user) return apiResponse(res, 200, false, 'Email not found');
+      await user.update({ otp });
+      return apiResponse(res, 200, true, 'Please check your email we have sent code.' + otp);
+    } else {
+      const user = await Customer.findOne({ where: { email } });
+      if (!user) return apiResponse(res, 200, false, 'Email not found');
+      await user.update({ otp });
+      return apiResponse(res, 200, true, 'Please check your email we have sent code.' + otp);
+    }
+  } catch (err) {
+    return apiResponse(res, 500, false, err.message);
+  }
+};
+
+exports.verifyOtp = async (req, res) => {
+  try {
+    const { email, otp, type } = req.body;
+    if (!email || !otp) return apiResponse(res, 200, false, 'Email and OTP are required');
+
+    if (type === 'Driver') {
+      const user = await Driver.findOne({ where: { email } });
+      if (!user) return apiResponse(res, 200, false, 'Email not found');
+      if (user.otp != otp) return apiResponse(res, 200, false, 'Please use valid otp');
+      return apiResponse(res, 200, true, 'Otp verified successfully');
+    } else {
+      const user = await Customer.findOne({ where: { email } });
+      if (!user) return apiResponse(res, 200, false, 'Email not found');
+      if (user.otp != otp) return apiResponse(res, 200, false, 'Please use valid otp');
+      return apiResponse(res, 200, true, 'Otp verified successfully');
+    }
+  } catch (err) {
+    return apiResponse(res, 500, false, err.message);
+  }
+};
+
+exports.driverResetPassword = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await Driver.findOne({ where: { email } });
+    if (!user) return apiResponse(res, 200, false, 'Email not found');
+    if (!user.otp) return apiResponse(res, 200, false, 'OTP not verified');
+    const hashed = await bcrypt.hash(password, 10);
+    await user.update({ password: hashed, otp: null });
+    return apiResponse(res, 200, true, 'Password updated successfully');
+  } catch (err) {
+    return apiResponse(res, 500, false, err.message);
+  }
+};
+
+exports.customerResetPassword = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await Customer.findOne({ where: { email } });
+    if (!user) return apiResponse(res, 200, false, 'Email not found');
+    if (!user.otp) return apiResponse(res, 200, false, 'OTP not verified');
+    const hashed = await bcrypt.hash(password, 10);
+    await user.update({ password: hashed, otp: null });
+    return apiResponse(res, 200, true, 'Password updated successfully');
+  } catch (err) {
+    return apiResponse(res, 500, false, err.message);
+  }
+};

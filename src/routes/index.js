@@ -30,6 +30,11 @@ router.post('/user_register',  registerLimiter, validateCustomerRegister,   auth
 router.post('/driver_register',registerLimiter, validateDriverRegister,     authController.driverRegister);
 router.post('/driver/signup',  registerLimiter,                             authController.signUpDriver);
 
+router.post('/password/forgot',          authController.forgotPassword);
+router.post('/otp/verify',               authController.verifyOtp);
+router.post('/password/reset',           authController.driverResetPassword);
+router.post('/customer/password/reset',  authController.customerResetPassword);
+
 router.get('/vehicleCategories',         authController.vehicleCategories);
 router.get('/order/reject/reason/list',   orderController.rejectReasonList);
 router.post('/rating/list',               orderController.getRatingList);
