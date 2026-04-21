@@ -290,6 +290,8 @@ exports.resetPassword = async (req, res) => {
 exports.forgotPassword = async (req, res) => {
   try {
     const { email, type } = req.body;
+    console.log("forgotPassword check body",req.body);
+    
     if (!email) return apiResponse(res, 200, false, 'Email is required');
 
     const otp = String(Math.floor(1000 + Math.random() * 9000));
@@ -317,7 +319,8 @@ exports.verifyOtp = async (req, res) => {
   try {
     const { email, otp, type } = req.body;
     if (!email || !otp) return apiResponse(res, 200, false, 'Email and OTP are required');
-
+    console.log("verifyOtp body",req.body);
+    
     if (type === 'Driver') {
       const user = await Driver.findOne({ where: { email } });
       if (!user) return apiResponse(res, 200, false, 'Email not found');
