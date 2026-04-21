@@ -261,6 +261,8 @@ exports.deleteDriver = async (req, res) => {
 exports.resetPassword = async (req, res) => {
   try {
     const { email, type } = req.body;
+    console.log("resetPassword body",req.body);
+    
     const newPassword = Math.random().toString(36).slice(-8);
     const hashed = await bcrypt.hash(newPassword, 10);
 
