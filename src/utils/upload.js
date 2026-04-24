@@ -13,6 +13,7 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
+  console.log("Upload fileFilter =>", { mimetype: file.mimetype, originalname: file.originalname, ext: path.extname(file.originalname) });
   const allowedMime = /^image\//;
   const allowedExt = /jpeg|jpg|png|gif|pdf|webp|bmp|tiff|tif|svg|heic|heif/;
   const mimeOk = allowedMime.test(file.mimetype);
