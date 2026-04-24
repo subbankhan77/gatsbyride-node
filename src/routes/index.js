@@ -57,10 +57,12 @@ router.post('/upload',
 router.post('/customerUpload',
   customerAuth,
   uploadLimiter,
-  upload.single('file'),
-  (req, res) => {
-    if (!req.file) return res.status(400).json({ status: false, message: 'No file uploaded' });
-    res.json({ status: true, message: 'File uploaded', filename: req.file.filename });
+  (req, res, next) => {
+    upload.single('file')(req, res, (err) => {
+      if (err) return res.status(422).json({ status: false, message: err.message });
+      if (!req.file) return res.status(400).json({ status: false, message: 'No file uploaded' });
+      res.json({ status: true, message: 'File uploaded', filename: req.file.filename });
+    });
   }
 );
 
