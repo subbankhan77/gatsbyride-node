@@ -32,6 +32,7 @@ exports.customerLogin = async (req, res) => {
       return apiResponse(res, 200, true, 'Login successfully', { token, user: customer });
     } else {
       // Google / Apple social login
+      console.log("Social Login Body =>", req.body);
       customer = await Customer.findOne({ where: { social_id, login_type } });
 
       if (customer) {
