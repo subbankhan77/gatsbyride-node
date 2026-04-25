@@ -630,18 +630,23 @@ exports.driverOrderReceipt = async (req, res) => {
 
     let extraTimeMin = 0;
     let extraTimeFare = 0;
-    if (order.estimated_time && actualMinutes > order.estimated_time) {
-      extraTimeMin = parseFloat((actualMinutes - order.estimated_time).toFixed(2));
-      const pricePerMin = parseFloat(category?.price_min) || 0;
-      extraTimeFare = parseFloat((extraTimeMin * pricePerMin).toFixed(2));
-    }
-
     let extraDistance = 0;
     let extraDistanceFare = 0;
-    if (actualDistance > parseFloat(order.distance)) {
-      extraDistance = parseFloat((actualDistance - parseFloat(order.distance)).toFixed(2));
-      const pricePerKm = parseFloat(category?.price_km) || 0;
-      extraDistanceFare = parseFloat((extraDistance * pricePerKm).toFixed(2));
+
+    const isFixedPrice = category?.fixed_price && parseFloat(category.fixed_price) > 0;
+
+    if (!isFixedPrice) {
+      if (order.estimated_time && actualMinutes > order.estimated_time) {
+        extraTimeMin = parseFloat((actualMinutes - order.estimated_time).toFixed(2));
+        const pricePerMin = parseFloat(category?.price_min) || 0;
+        extraTimeFare = parseFloat((extraTimeMin * pricePerMin).toFixed(2));
+      }
+
+      if (actualDistance > parseFloat(order.distance)) {
+        extraDistance = parseFloat((actualDistance - parseFloat(order.distance)).toFixed(2));
+        const pricePerKm = parseFloat(category?.price_km) || 0;
+        extraDistanceFare = parseFloat((extraDistance * pricePerKm).toFixed(2));
+      }
     }
 
     const grandTotal = parseFloat((parseFloat(order.total) + extraDistanceFare + extraTimeFare).toFixed(2));

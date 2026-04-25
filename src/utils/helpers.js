@@ -44,6 +44,9 @@ async function getDrivingDistance(origin, destination) {
 }
 
 function calculateFare(category, distanceKm, durationMin = 0) {
+  if (category.fixed_price && parseFloat(category.fixed_price) > 0) {
+    return parseFloat(category.fixed_price);
+  }
   let total = parseFloat(category.base_fare) || 0;
   const km = parseFloat(distanceKm) || 0;
   const minKm = parseFloat(category.min_km) || 0;

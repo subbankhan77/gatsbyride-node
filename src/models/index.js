@@ -98,6 +98,7 @@ const VehicleCategory = sequelize.define('VehicleCategory', {
   min_km: DataTypes.DECIMAL(10, 2),
   min_price: DataTypes.DECIMAL(10, 2),
   extra_km: DataTypes.DECIMAL(10, 2),
+  fixed_price: DataTypes.DECIMAL(10, 2),
   night_service: DataTypes.DECIMAL(10, 2),
   seat: DataTypes.INTEGER,
   deleted_at: DataTypes.DATE,
