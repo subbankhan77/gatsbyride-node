@@ -371,6 +371,7 @@ function setupSocket(io) {
         if (!roomID) return;
 
         socket.join(roomID);
+        socket._chatRoom = roomID; // track for unJoin
         console.log(`💬 Chat Join: ${socket.userGuard} ${socket.userId} joined room ${roomID}`);
 
         try {
@@ -393,6 +394,7 @@ function setupSocket(io) {
             where: order ? { order_id: order.id } : { order_id: null },
             order: [['created_at', 'ASC']],
             limit: 50,
+            raw: true,
           });
 
           socket.emit('message', {
@@ -404,6 +406,17 @@ function setupSocket(io) {
           console.log(`💬 Chat history sent: ${messages.length} messages to ${socket.userGuard} ${socket.userId}`);
         } catch (err) {
           console.error('💬 Chat Join error:', err.message);
+        }
+      }
+
+      // unJoin — chat screen se bahar gaya, room se hata do taaki FCM properly fire ho
+      if (serviceType === 'unJoin') {
+        const { roomID } = data;
+        const leaveRoom = roomID || socket._chatRoom;
+        if (leaveRoom) {
+          socket.leave(leaveRoom);
+          socket._chatRoom = null;
+          console.log(`💬 Chat unJoin: ${socket.userGuard} ${socket.userId} left room ${leaveRoom}`);
         }
       }
 
@@ -463,9 +476,16 @@ function setupSocket(io) {
           socket.to(room).emit('message', payload);
           console.log(`💬 Chat forwarded to room ${room}`);
 
-          // FCM — agar receiver room mein nahi hai (offline)
-          const roomSize = io.sockets.adapter.rooms.get(room)?.size || 0;
-          if (roomSize <= 1) {
+          // FCM — agar receiver room mein nahi hai (unJoin kar chuka ya offline)
+          // Receiver room ka name: driver→ customer_X, customer→ driver_X
+          const receiverPersonalRoom = senderType === 'driver'
+            ? `customer_${receiverId}`
+            : `driver_${receiverId}`;
+          const receiverInChatRoom = io.sockets.adapter.rooms.get(room)?.size || 0;
+          const receiverOnline = io.sockets.adapter.rooms.get(receiverPersonalRoom)?.size || 0;
+          console.log(`💬 Room "${room}" size: ${receiverInChatRoom} | "${receiverPersonalRoom}" size: ${receiverOnline}`);
+
+          if (receiverInChatRoom <= 1 || receiverOnline === 0) {
             const ReceiverModel = senderType === 'driver' ? Customer : Driver;
             const receiver = await ReceiverModel.findByPk(receiverId, {
               attributes: ['fcm_token'],
