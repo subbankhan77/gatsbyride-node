@@ -1,4 +1,5 @@
 const { Driver, Customer, Order, ChatMessage } = require('../models');
+const { Op } = require('sequelize');
 const jwt = require('jsonwebtoken');
 const { getLiveETA } = require('../utils/helpers');
 const { sendNotification } = require('../utils/fcm');
@@ -363,6 +364,135 @@ function setupSocket(io) {
           console.error('❌ UserBookDriver (message) error:', err.message);
         }
       }
+
+      // Chat room join — Flutter app roomID format: "driverId-customerId"
+      if (serviceType === 'Join') {
+        const { roomID } = data;
+        if (!roomID) return;
+
+        socket.join(roomID);
+        console.log(`💬 Chat Join: ${socket.userGuard} ${socket.userId} joined room ${roomID}`);
+
+        try {
+          const [driverIdStr, customerIdStr] = String(roomID).split('-');
+          const driverIdNum = parseInt(driverIdStr);
+          const customerIdNum = parseInt(customerIdStr);
+
+          // Driver-customer ke beech latest active order dhundo
+          const order = await Order.findOne({
+            where: {
+              driver_id: driverIdNum,
+              customer_id: customerIdNum,
+              status: { [Op.in]: [1, 2, 3, 5, 7] },
+            },
+            attributes: ['id'],
+            order: [['id', 'DESC']],
+          });
+
+          const messages = await ChatMessage.findAll({
+            where: order ? { order_id: order.id } : { order_id: null },
+            order: [['created_at', 'ASC']],
+            limit: 50,
+          });
+
+          socket.emit('message', {
+            type: 'MessageList',
+            Response: 'true',
+            data: messages,
+          });
+
+          console.log(`💬 Chat history sent: ${messages.length} messages to ${socket.userGuard} ${socket.userId}`);
+        } catch (err) {
+          console.error('💬 Chat Join error:', err.message);
+        }
+      }
+
+      // Chat message — Flutter app data format: { serviceType, msg, room }
+      if (serviceType === 'Chat') {
+        const { msg, room } = data;
+        if (!msg || !room) {
+          console.warn('[Chat] Missing msg or room:', data);
+          return;
+        }
+
+        const senderId = socket.userId;
+        const senderType = socket.userGuard; // JWT se — trust karo client ko nahi
+
+        const [driverIdStr, customerIdStr] = String(room).split('-');
+        const driverIdNum = parseInt(driverIdStr);
+        const customerIdNum = parseInt(customerIdStr);
+
+        // Receiver ID determine karo
+        const receiverId = senderType === 'driver' ? customerIdNum : driverIdNum;
+
+        console.log(`💬 Chat: ${senderType} ${senderId} → room ${room} | msg: "${String(msg).substring(0, 40)}"`);
+
+        try {
+          // Active order find karo
+          const order = await Order.findOne({
+            where: { driver_id: driverIdNum, customer_id: customerIdNum },
+            attributes: ['id'],
+            order: [['id', 'DESC']],
+          });
+
+          const orderId = order?.id || null;
+
+          // DB mein save karo
+          const savedMsg = await ChatMessage.create({
+            order_id: orderId,
+            sender_id: senderId,
+            sender_type: senderType,
+            receiver_id: receiverId,
+            message: msg,
+          });
+
+          const payload = {
+            type: 'Chat',
+            Response: 'true',
+            data: {
+              id: savedMsg.id,
+              message: msg,
+              sender_id: senderId,
+              sender_type: senderType,
+              order_id: orderId,
+              created_at: savedMsg.created_at,
+            },
+          };
+
+          // Room mein baaki sab ko forward karo (sender ko nahi)
+          socket.to(room).emit('message', payload);
+          console.log(`💬 Chat forwarded to room ${room}`);
+
+          // FCM — agar receiver room mein nahi hai (offline)
+          const roomSize = io.sockets.adapter.rooms.get(room)?.size || 0;
+          if (roomSize <= 1) {
+            const ReceiverModel = senderType === 'driver' ? Customer : Driver;
+            const receiver = await ReceiverModel.findByPk(receiverId, {
+              attributes: ['fcm_token'],
+            }).catch(() => null);
+
+            if (receiver?.fcm_token) {
+              sendNotification(
+                receiver.fcm_token,
+                'New Message',
+                String(msg).substring(0, 100),
+                {
+                  type: 'chat',
+                  order_id: String(orderId || ''),
+                  sender_id: String(senderId),
+                  sender_type: String(senderType),
+                  room: String(room),
+                }
+              ).catch((err) => console.error('Chat FCM error:', err.message));
+              console.log(`💬 FCM sent to ${senderType === 'driver' ? 'customer' : 'driver'} ${receiverId}`);
+            } else {
+              console.warn(`💬 Receiver ${receiverId} has no FCM token — notification skip`);
+            }
+          }
+        } catch (err) {
+          console.error('💬 Chat handler error:', err.message);
+        }
+      }
     });
 
     socket.on('UserBookDriver', async (data) => {
@@ -383,32 +513,68 @@ function setupSocket(io) {
     });
 
     socket.on('send_message', async (data) => {
-      const { to_room, message, sender_id, sender_type, receiver_id, order_id } = data;
-      const actualSenderId = sender_id || socket.userId;
+      const { message, order_id } = data;
+      const senderId = socket.userId;
+      const senderType = socket.userGuard; // JWT se — 'customer' ya 'driver'
 
-      const msgPayload = {
-        message,
-        sender_id: actualSenderId,
-        sender_type,
-        order_id,
-        timestamp: new Date().toISOString(),
-      };
+      if (!order_id || !message || !senderId) {
+        console.warn('[send_message] Missing required fields:', { order_id, message, senderId });
+        return;
+      }
 
-      io.to(to_room).emit('receive_message', msgPayload);
+      try {
+        const order = await Order.findByPk(order_id, {
+          attributes: ['id', 'customer_id', 'driver_id'],
+        });
 
-      ChatMessage.create({
-        order_id: order_id || null,
-        sender_id: actualSenderId,
-        sender_type: sender_type || 'customer',
-        receiver_id: receiver_id || null,
-        message,
-      }).catch((err) => console.error('Chat save error:', err.message));
+        if (!order) {
+          console.warn(`[send_message] Order ${order_id} not found`);
+          return;
+        }
 
-      if (receiver_id) {
-        const roomSize = io.sockets.adapter.rooms.get(to_room)?.size || 0;
+        // Sender ke hisaab se receiver determine karo
+        let receiverId, targetRoom;
+        if (senderType === 'driver') {
+          receiverId = order.customer_id;
+          targetRoom = `customer_${receiverId}`;
+        } else {
+          receiverId = order.driver_id;
+          targetRoom = `driver_${receiverId}`;
+        }
+
+        if (!receiverId) {
+          console.warn(`[send_message] Receiver not found for order ${order_id} (driver assigned?)`);
+          return;
+        }
+
+        const msgPayload = {
+          message,
+          sender_id: senderId,
+          sender_type: senderType,
+          order_id,
+          timestamp: new Date().toISOString(),
+        };
+
+        // Receiver ke room mein aur order room mein emit karo
+        io.to(targetRoom).emit('receive_message', msgPayload);
+        io.to(`order_${order_id}`).emit('receive_message', msgPayload);
+
+        console.log(`[send_message] ${senderType} ${senderId} → ${targetRoom} | order ${order_id}`);
+
+        // DB mein save karo
+        ChatMessage.create({
+          order_id,
+          sender_id: senderId,
+          sender_type: senderType,
+          receiver_id: receiverId,
+          message,
+        }).catch((err) => console.error('Chat save error:', err.message));
+
+        // FCM — agar receiver room mein nahi hai
+        const roomSize = io.sockets.adapter.rooms.get(targetRoom)?.size || 0;
         if (roomSize === 0) {
-          const ReceiverModel = sender_type === 'driver' ? Customer : Driver;
-          const receiver = await ReceiverModel.findByPk(receiver_id, {
+          const ReceiverModel = senderType === 'driver' ? Customer : Driver;
+          const receiver = await ReceiverModel.findByPk(receiverId, {
             attributes: ['fcm_token'],
           }).catch(() => null);
 
@@ -419,13 +585,18 @@ function setupSocket(io) {
               String(message).substring(0, 100),
               {
                 type: 'chat',
-                order_id: String(order_id || ''),
-                sender_id: String(actualSenderId),
-                sender_type: String(sender_type || ''),
+                order_id: String(order_id),
+                sender_id: String(senderId),
+                sender_type: String(senderType),
               }
             ).catch((err) => console.error('Chat FCM error:', err.message));
+            console.log(`[send_message] FCM sent to ${senderType === 'driver' ? 'customer' : 'driver'} ${receiverId}`);
+          } else {
+            console.warn(`[send_message] Receiver ${receiverId} has no FCM token`);
           }
         }
+      } catch (err) {
+        console.error('[send_message] Error:', err.message);
       }
     });
 

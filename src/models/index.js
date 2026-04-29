@@ -23,6 +23,7 @@ const Customer = sequelize.define('Customer', {
   latitude: DataTypes.DECIMAL(10, 8),
   longitude: DataTypes.DECIMAL(11, 8),
   api_token: DataTypes.TEXT,
+  stripe_customer_id: DataTypes.STRING,
   deleted_at: DataTypes.DATE,
 }, {
   tableName: 'customers',

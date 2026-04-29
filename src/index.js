@@ -12,6 +12,7 @@ const sequelize = require('./config/database');
 const { createPubSubClients } = require('./config/redis');
 const routes = require('./routes');
 const adminRoutes = require('./routes/admin');
+const paymentController = require('./controllers/paymentController');
 const setupSocket = require('./socket');
 const { driverOnline } = require('./utils/driverLocation');
 const { Driver } = require('./models');
@@ -56,6 +57,9 @@ app.use(cors({
   origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
 }));
+// Stripe webhook — raw body chahiye, isliye express.json() se pehle register karo
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), paymentController.webhookHandler);
+
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 

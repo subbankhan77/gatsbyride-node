@@ -81,6 +81,7 @@ router.get('/order-status-user/:id', customerAuth,                              
 router.get('/driver_location',     customerAuth,                                       orderController.getDriverLocation);
 router.get('/price-check',         customerAuth,                                       orderController.getTotalPrice);
 
+router.post('/stripe/setup-intent', customerAuth,                                      paymentController.createSetupIntent);
 router.post('/card/detail/add',    customerAuth,                                       paymentController.addCard);
 router.post('/card/list',          customerAuth,                                       paymentController.listCards);
 router.post('/card/delete',        customerAuth,                                       paymentController.deleteCard);
@@ -128,7 +129,6 @@ router.delete('/driver/account/delete',     driverAuth,                         
 
 router.get('/order/route/:order_id', orderController.getOrderRoute);
 router.get('/surge/check',           orderController.getSurgeInfo);
-
 router.get('/order/chat/:order_id', verifyToken('customer'), orderController.getChatHistory);
 router.get('/driver/order/chat/:order_id', verifyToken('driver'), orderController.getChatHistory);
 
