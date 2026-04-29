@@ -435,9 +435,8 @@ function setupSocket(io) {
         const driverIdNum = parseInt(driverIdStr);
         const customerIdNum = parseInt(customerIdStr);
 
-        // Receiver ID aur personal room determine karo
+        // Receiver ID determine karo
         const receiverId = senderType === 'driver' ? customerIdNum : driverIdNum;
-        const receiverPersonalRoom = senderType === 'driver' ? `customer_${receiverId}` : `driver_${receiverId}`;
 
         console.log(`💬 Chat: ${senderType} ${senderId} → room ${room} | msg: "${String(msg).substring(0, 40)}"`);
 
@@ -473,13 +472,15 @@ function setupSocket(io) {
             },
           };
 
-          // Chat room mein forward karo
+          // Room mein baaki sab ko forward karo (sender ko nahi)
           socket.to(room).emit('message', payload);
-          // Receiver ke personal room mein bhi emit karo (agar chat room join nahi kiya)
-          socket.to(receiverPersonalRoom).emit('message', payload);
-          console.log(`💬 Chat forwarded to room ${room} + ${receiverPersonalRoom}`);
+          console.log(`💬 Chat forwarded to room ${room}`);
 
           // FCM — agar receiver room mein nahi hai (unJoin kar chuka ya offline)
+          // Receiver room ka name: driver→ customer_X, customer→ driver_X
+          const receiverPersonalRoom = senderType === 'driver'
+            ? `customer_${receiverId}`
+            : `driver_${receiverId}`;
           const receiverInChatRoom = io.sockets.adapter.rooms.get(room)?.size || 0;
           const receiverOnline = io.sockets.adapter.rooms.get(receiverPersonalRoom)?.size || 0;
           console.log(`💬 Room "${room}" size: ${receiverInChatRoom} | "${receiverPersonalRoom}" size: ${receiverOnline}`);
