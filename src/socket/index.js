@@ -10,7 +10,7 @@ const {
   setDriverBusy,
   setDriverFree,
 } = require('../utils/driverLocation');
-const { stopDispatch } = require('../utils/dispatchQueue');
+const { stopDispatch, getCurrentDispatchDriver } = require('../utils/dispatchQueue');
 const { redis } = require('../config/redis');
 const { attachSocketLogger } = require('../middleware/logger');
 
@@ -362,6 +362,52 @@ function setupSocket(io) {
           console.log(`✅ Customer ${UserID} joined customer_${UserID} + order_${OrderID} rooms`);
         } catch (err) {
           console.error('❌ UserBookDriver (message) error:', err.message);
+        }
+      }
+
+      // User ne order cancel kiya — driver ka modal band karo
+      if (serviceType === 'CancelByUser') {
+        const { UserID, OrderID } = data;
+        const orderId = OrderID || data.order_id;
+        console.log(`🚫 CancelByUser: customer ${UserID} cancelled order ${orderId}`);
+        try {
+          const order = await Order.findByPk(orderId, { attributes: ['id', 'driver_id', 'status'] });
+          if (!order) return;
+
+          // Order cancel mark karo (sirf pending ho tab)
+          await Order.update(
+            { status: 8 },
+            { where: { id: orderId, status: 0 } }
+          );
+
+          // Dispatch band karo
+          stopDispatch(orderId).catch(() => {});
+
+          // Current driver ko notify karo — modal band ho jaye
+          const currentDriverId = order.driver_id;
+          if (currentDriverId) {
+            io.to(`driver_${currentDriverId}`).emit('message', {
+              type: 'CancelOrder',
+              Response: 'true',
+              data: { order_id: orderId, message: 'Customer ne order cancel kar diya' },
+            });
+            console.log(`🚫 Cancel notified to driver_${currentDriverId}`);
+          }
+
+          // Redis se pending_order bhi hata do
+          // (current dispatch driver ko bhi notify karo)
+          const dispatchDriver = await getCurrentDispatchDriver(orderId).catch(() => null);
+          if (dispatchDriver?.driver_id && dispatchDriver.driver_id !== currentDriverId) {
+            io.to(`driver_${dispatchDriver.driver_id}`).emit('message', {
+              type: 'CancelOrder',
+              Response: 'true',
+              data: { order_id: orderId, message: 'Customer ne order cancel kar diya' },
+            });
+            await redis.del(`driver:pending_order:${dispatchDriver.driver_id}`).catch(() => {});
+            console.log(`🚫 Cancel notified to dispatch driver_${dispatchDriver.driver_id}`);
+          }
+        } catch (err) {
+          console.error('❌ CancelByUser error:', err.message);
         }
       }
 
