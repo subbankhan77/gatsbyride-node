@@ -371,40 +371,35 @@ function setupSocket(io) {
         const orderId = OrderID || data.order_id;
         console.log(`🚫 CancelByUser: customer ${UserID} cancelled order ${orderId}`);
         try {
+          // PEHLE dispatch driver dhundo (stopDispatch se pehle — warna Redis delete ho jayega)
+          const dispatchDriver = await getCurrentDispatchDriver(orderId).catch(() => null);
+
           const order = await Order.findByPk(orderId, { attributes: ['id', 'driver_id', 'status'] });
           if (!order) return;
 
-          // Order cancel mark karo (sirf pending ho tab)
-          await Order.update(
-            { status: 8 },
-            { where: { id: orderId, status: 0 } }
-          );
+          // Order cancel mark karo
+          await Order.update({ status: 8 }, { where: { id: orderId, status: 0 } });
 
           // Dispatch band karo
           stopDispatch(orderId).catch(() => {});
 
-          // Current driver ko notify karo — modal band ho jaye
-          const currentDriverId = order.driver_id;
-          if (currentDriverId) {
-            io.to(`driver_${currentDriverId}`).emit('message', {
-              type: 'CancelOrder',
-              Response: 'true',
-              data: { order_id: orderId, message: 'Customer ne order cancel kar diya' },
-            });
-            console.log(`🚫 Cancel notified to driver_${currentDriverId}`);
-          }
+          const cancelPayload = {
+            type: 'CancelOrder',
+            Response: 'true',
+            data: { order_id: orderId, message: 'Customer ne order cancel kar diya' },
+          };
 
-          // Redis se pending_order bhi hata do
-          // (current dispatch driver ko bhi notify karo)
-          const dispatchDriver = await getCurrentDispatchDriver(orderId).catch(() => null);
-          if (dispatchDriver?.driver_id && dispatchDriver.driver_id !== currentDriverId) {
-            io.to(`driver_${dispatchDriver.driver_id}`).emit('message', {
-              type: 'CancelOrder',
-              Response: 'true',
-              data: { order_id: orderId, message: 'Customer ne order cancel kar diya' },
-            });
+          // Dispatch wale driver ko notify karo (jiske paas ride request aa rahi thi)
+          if (dispatchDriver?.driver_id) {
+            io.to(`driver_${dispatchDriver.driver_id}`).emit('message', cancelPayload);
             await redis.del(`driver:pending_order:${dispatchDriver.driver_id}`).catch(() => {});
             console.log(`🚫 Cancel notified to dispatch driver_${dispatchDriver.driver_id}`);
+          }
+
+          // Agar driver ne accept kar liya tha (driver_id set hai) aur alag hai
+          if (order.driver_id && order.driver_id !== dispatchDriver?.driver_id) {
+            io.to(`driver_${order.driver_id}`).emit('message', cancelPayload);
+            console.log(`🚫 Cancel notified to accepted driver_${order.driver_id}`);
           }
         } catch (err) {
           console.error('❌ CancelByUser error:', err.message);
