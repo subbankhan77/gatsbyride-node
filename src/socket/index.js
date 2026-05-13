@@ -263,7 +263,7 @@ function setupSocket(io) {
       }
 
       if (serviceType === 'ChangeStatus') {
-        const { orderID: csOrderId, Status, actualTime, StartTime, EndTime, distance } = data;
+        const { orderID: csOrderId, Status, actualTime, StartTime, EndTime, distance, Latitude, Longitude } = data;
 
         console.log(`🔄 ChangeStatus: order=${csOrderId} status=${Status} driver=${driverId}`);
 
@@ -326,6 +326,8 @@ function setupSocket(io) {
               pending_amount: 0,
               estimated_time: 0,
               actual_time: actualTime || 0,
+              Latitude: Latitude ?? '',
+              Longitude: Longitude ?? '',
             },
           };
 
@@ -365,22 +367,18 @@ function setupSocket(io) {
         }
       }
 
-      // User ne order cancel kiya — driver ka modal band karo
       if (serviceType === 'CancelByUser') {
         const { UserID, OrderID } = data;
         const orderId = OrderID || data.order_id;
         console.log(`🚫 CancelByUser: customer ${UserID} cancelled order ${orderId}`);
         try {
-          // PEHLE dispatch driver dhundo (stopDispatch se pehle — warna Redis delete ho jayega)
           const dispatchDriver = await getCurrentDispatchDriver(orderId).catch(() => null);
 
           const order = await Order.findByPk(orderId, { attributes: ['id', 'driver_id', 'status'] });
           if (!order) return;
 
-          // Order cancel mark karo
           await Order.update({ status: 8 }, { where: { id: orderId, status: 0 } });
 
-          // Dispatch band karo
           stopDispatch(orderId).catch(() => {});
 
           const cancelPayload = {
@@ -389,14 +387,12 @@ function setupSocket(io) {
             data: { order_id: orderId, message: 'Customer ne order cancel kar diya' },
           };
 
-          // Dispatch wale driver ko notify karo (jiske paas ride request aa rahi thi)
           if (dispatchDriver?.driver_id) {
             io.to(`driver_${dispatchDriver.driver_id}`).emit('message', cancelPayload);
             await redis.del(`driver:pending_order:${dispatchDriver.driver_id}`).catch(() => {});
             console.log(`🚫 Cancel notified to dispatch driver_${dispatchDriver.driver_id}`);
           }
 
-          // Agar driver ne accept kar liya tha (driver_id set hai) aur alag hai
           if (order.driver_id && order.driver_id !== dispatchDriver?.driver_id) {
             io.to(`driver_${order.driver_id}`).emit('message', cancelPayload);
             console.log(`🚫 Cancel notified to accepted driver_${order.driver_id}`);
@@ -406,13 +402,12 @@ function setupSocket(io) {
         }
       }
 
-      // Chat room join — Flutter app roomID format: "driverId-customerId"
       if (serviceType === 'Join') {
         const { roomID } = data;
         if (!roomID) return;
 
         socket.join(roomID);
-        socket._chatRoom = roomID; // track for unJoin
+        socket._chatRoom = roomID;
         console.log(`💬 Chat Join: ${socket.userGuard} ${socket.userId} joined room ${roomID}`);
 
         try {
@@ -420,7 +415,6 @@ function setupSocket(io) {
           const driverIdNum = parseInt(driverIdStr);
           const customerIdNum = parseInt(customerIdStr);
 
-          // Driver-customer ke beech latest active order dhundo
           const order = await Order.findOne({
             where: {
               driver_id: driverIdNum,
@@ -450,7 +444,6 @@ function setupSocket(io) {
         }
       }
 
-      // unJoin — chat screen se bahar gaya, room se hata do taaki FCM properly fire ho
       if (serviceType === 'unJoin') {
         const { roomID } = data;
         const leaveRoom = roomID || socket._chatRoom;
@@ -461,7 +454,6 @@ function setupSocket(io) {
         }
       }
 
-      // Chat message — Flutter app data format: { serviceType, msg, room }
       if (serviceType === 'Chat') {
         const { msg, room } = data;
         if (!msg || !room) {
@@ -470,19 +462,17 @@ function setupSocket(io) {
         }
 
         const senderId = socket.userId;
-        const senderType = socket.userGuard; // JWT se — trust karo client ko nahi
+        const senderType = socket.userGuard;
 
         const [driverIdStr, customerIdStr] = String(room).split('-');
         const driverIdNum = parseInt(driverIdStr);
         const customerIdNum = parseInt(customerIdStr);
 
-        // Receiver ID determine karo
         const receiverId = senderType === 'driver' ? customerIdNum : driverIdNum;
 
         console.log(`💬 Chat: ${senderType} ${senderId} → room ${room} | msg: "${String(msg).substring(0, 40)}"`);
 
         try {
-          // Active order find karo
           const order = await Order.findOne({
             where: { driver_id: driverIdNum, customer_id: customerIdNum },
             attributes: ['id'],
@@ -491,7 +481,6 @@ function setupSocket(io) {
 
           const orderId = order?.id || null;
 
-          // DB mein save karo
           const savedMsg = await ChatMessage.create({
             order_id: orderId,
             sender_id: senderId,
@@ -513,12 +502,9 @@ function setupSocket(io) {
             },
           };
 
-          // Room mein baaki sab ko forward karo (sender ko nahi)
           socket.to(room).emit('message', payload);
           console.log(`💬 Chat forwarded to room ${room}`);
 
-          // FCM — agar receiver room mein nahi hai (unJoin kar chuka ya offline)
-          // Receiver room ka name: driver→ customer_X, customer→ driver_X
           const receiverPersonalRoom = senderType === 'driver'
             ? `customer_${receiverId}`
             : `driver_${receiverId}`;
@@ -576,7 +562,7 @@ function setupSocket(io) {
     socket.on('send_message', async (data) => {
       const { message, order_id } = data;
       const senderId = socket.userId;
-      const senderType = socket.userGuard; // JWT se — 'customer' ya 'driver'
+      const senderType = socket.userGuard;
 
       if (!order_id || !message || !senderId) {
         console.warn('[send_message] Missing required fields:', { order_id, message, senderId });
@@ -593,7 +579,6 @@ function setupSocket(io) {
           return;
         }
 
-        // Sender ke hisaab se receiver determine karo
         let receiverId, targetRoom;
         if (senderType === 'driver') {
           receiverId = order.customer_id;
@@ -616,13 +601,11 @@ function setupSocket(io) {
           timestamp: new Date().toISOString(),
         };
 
-        // Receiver ke room mein aur order room mein emit karo
         io.to(targetRoom).emit('receive_message', msgPayload);
         io.to(`order_${order_id}`).emit('receive_message', msgPayload);
 
         console.log(`[send_message] ${senderType} ${senderId} → ${targetRoom} | order ${order_id}`);
 
-        // DB mein save karo
         ChatMessage.create({
           order_id,
           sender_id: senderId,
@@ -631,7 +614,6 @@ function setupSocket(io) {
           message,
         }).catch((err) => console.error('Chat save error:', err.message));
 
-        // FCM — agar receiver room mein nahi hai
         const roomSize = io.sockets.adapter.rooms.get(targetRoom)?.size || 0;
         if (roomSize === 0) {
           const ReceiverModel = senderType === 'driver' ? Customer : Driver;

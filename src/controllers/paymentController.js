@@ -2,7 +2,6 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET);
 const { UserCardDetails, Payment, Order, Customer } = require('../models');
 const { apiResponse } = require('../utils/helpers');
 
-// Helper: Stripe Customer create ya retrieve karo
 async function getOrCreateStripeCustomer(user) {
   if (user.stripe_customer_id) return user.stripe_customer_id;
   const customer = await stripe.customers.create({
@@ -14,8 +13,39 @@ async function getOrCreateStripeCustomer(user) {
   return customer.id;
 }
 
-// POST /stripe/setup-intent
-// Frontend card save karne se pehle yeh call kare
+exports.createPaymentIntent = async (req, res) => {
+  try {
+    const { order_id, driver_id, amount, tip = '0', currency = 'cad' } = req.body;
+
+    if (!order_id || !amount) {
+      return apiResponse(res, 422, false, 'order_id and amount are required');
+    }
+
+    const order = await Order.findOne({ where: { id: order_id, customer_id: req.user.id } });
+    if (!order) return apiResponse(res, 404, false, 'Order not found');
+
+    const totalAmount = Math.round((parseFloat(amount) + parseFloat(tip)) * 100);
+    if (totalAmount < 50) return apiResponse(res, 422, false, 'Amount too low (minimum 0.50)');
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: totalAmount,
+      currency: currency.toLowerCase(),
+      metadata: {
+        order_id: String(order_id),
+        driver_id: String(driver_id || order.driver_id || ''),
+        customer_id: String(req.user.id),
+      },
+    });
+
+    return res.json({
+      success: 1,
+      client_secret: paymentIntent.client_secret,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: 0, message: err.message });
+  }
+};
+
 exports.createSetupIntent = async (req, res) => {
   try {
     const user = await Customer.findByPk(req.user.id);
@@ -37,7 +67,6 @@ exports.createSetupIntent = async (req, res) => {
   }
 };
 
-// POST /card/detail/add
 exports.addCard = async (req, res) => {
   try {
     const { payment_method_id, card_holder_name } = req.body;
@@ -56,7 +85,6 @@ exports.addCard = async (req, res) => {
     const user = await Customer.findByPk(req.user.id);
     const customerId = await getOrCreateStripeCustomer(user);
 
-    // PaymentMethod ko Stripe Customer se attach karo (agar already attached nahi hai)
     if (!pm.customer) {
       await stripe.paymentMethods.attach(payment_method_id, { customer: customerId });
     }
@@ -81,7 +109,6 @@ exports.addCard = async (req, res) => {
   }
 };
 
-// POST /card/list
 exports.listCards = async (req, res) => {
   try {
     const cards = await UserCardDetails.findAll({
@@ -94,35 +121,26 @@ exports.listCards = async (req, res) => {
   }
 };
 
-// POST /card/delete
 exports.deleteCard = async (req, res) => {
   try {
     const { card_id } = req.body;
     const card = await UserCardDetails.findOne({ where: { id: card_id, user_id: req.user.id, status: 1 } });
     if (!card) return apiResponse(res, 404, false, 'Card not found');
 
-    // Stripe se bhi detach karo
-    try {
-      await stripe.paymentMethods.detach(card.stripe_payment_method_id);
-    } catch (_) {
-      // Stripe detach fail ho toh bhi DB se delete karo
-    }
-
+    await stripe.paymentMethods.detach(card.stripe_payment_method_id).catch(() => {});
     await card.update({ status: 0 });
+
     return apiResponse(res, 200, true, 'Card deleted');
   } catch (err) {
     return apiResponse(res, 500, false, err.message);
   }
 };
 
-// POST /driver/payment
 exports.chargePayment = async (req, res) => {
   try {
     const { order_id, amount, payment_method_id } = req.body;
 
-    const order = await Order.findOne({
-      where: { id: order_id, customer_id: req.user.id },
-    });
+    const order = await Order.findOne({ where: { id: order_id, customer_id: req.user.id } });
     if (!order) return apiResponse(res, 404, false, 'Order not found');
 
     const expectedAmount = parseFloat(order.grand_total || order.total || 0);
@@ -139,20 +157,31 @@ exports.chargePayment = async (req, res) => {
       return apiResponse(res, 422, false, 'No Stripe customer found. Please add a card first.');
     }
 
-    // Verify card belongs to this user
     const cardRecord = await UserCardDetails.findOne({
       where: { user_id: req.user.id, stripe_payment_method_id: payment_method_id, status: 1 },
     });
     if (!cardRecord) return apiResponse(res, 403, false, 'Payment method not found for this user');
 
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(requestedAmount * 100),
-      currency: 'usd',
-      customer: user.stripe_customer_id,
-      payment_method: payment_method_id,
-      confirm: true,
-      off_session: true,
-    });
+    let paymentIntent;
+    try {
+      paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(requestedAmount * 100),
+        currency: 'usd',
+        customer: user.stripe_customer_id,
+        payment_method: payment_method_id,
+        confirm: true,
+        off_session: true,
+      });
+    } catch (stripeErr) {
+      if (stripeErr.code === 'authentication_required') {
+        return apiResponse(res, 402, false, '3D Secure authentication required', {
+          requires_action: true,
+          client_secret: stripeErr.raw?.payment_intent?.client_secret,
+          payment_intent_id: stripeErr.raw?.payment_intent?.id,
+        });
+      }
+      return apiResponse(res, 402, false, stripeErr.message);
+    }
 
     const payment = await Payment.create({
       driver_id: order.driver_id,
@@ -166,6 +195,15 @@ exports.chargePayment = async (req, res) => {
       await order.update({ status: 7 });
     }
 
+    if (paymentIntent.status === 'requires_action') {
+      return apiResponse(res, 200, true, '3D Secure required', {
+        requires_action: true,
+        client_secret: paymentIntent.client_secret,
+        payment_intent_id: paymentIntent.id,
+        payment_id: payment.id,
+      });
+    }
+
     return apiResponse(res, 200, true, 'Payment processed', {
       payment_id: payment.id,
       transaction_id: paymentIntent.id,
@@ -176,14 +214,35 @@ exports.chargePayment = async (req, res) => {
   }
 };
 
-// POST /driver/payment/confirmation  (cash payment ke liye)
+exports.confirmPayment = async (req, res) => {
+  try {
+    const { payment_intent_id } = req.body;
+    if (!payment_intent_id) return apiResponse(res, 422, false, 'payment_intent_id required');
+
+    const paymentIntent = await stripe.paymentIntents.retrieve(payment_intent_id);
+
+    if (paymentIntent.status !== 'succeeded') {
+      return apiResponse(res, 402, false, `Payment not completed. Status: ${paymentIntent.status}`);
+    }
+
+    await Payment.update({ status: 1 }, { where: { transaction_id: payment_intent_id, status: 0 } });
+
+    const payment = await Payment.findOne({ where: { transaction_id: payment_intent_id } });
+    if (payment) {
+      await Order.update({ status: 7 }, { where: { id: payment.order_id } });
+    }
+
+    return apiResponse(res, 200, true, 'Payment confirmed', { transaction_id: payment_intent_id });
+  } catch (err) {
+    return apiResponse(res, 500, false, err.message);
+  }
+};
+
 exports.paymentConfirmation = async (req, res) => {
   try {
     const { order_id, tip } = req.body;
 
-    const order = await Order.findOne({
-      where: { id: order_id, driver_id: req.user.id },
-    });
+    const order = await Order.findOne({ where: { id: order_id, driver_id: req.user.id } });
     if (!order) return apiResponse(res, 404, false, 'Order not found');
 
     const payment = await Payment.create({
@@ -202,34 +261,47 @@ exports.paymentConfirmation = async (req, res) => {
   }
 };
 
-// POST /stripe/webhook  (raw body chahiye - index.js mein handle kiya)
-exports.webhookHandler = (req, res) => {
+exports.webhookHandler = async (req, res) => {
   const sig = req.headers['stripe-signature'];
-  if (!process.env.STRIPE_WEBHOOK_SECRET) {
-    console.warn('STRIPE_WEBHOOK_SECRET not set, skipping verification');
-    return res.json({ received: true });
-  }
 
   let event;
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (err) {
-    console.error('Stripe webhook error:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+  if (process.env.STRIPE_WEBHOOK_SECRET) {
+    try {
+      event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    } catch (err) {
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+  } else {
+    try {
+      event = JSON.parse(req.body.toString());
+    } catch {
+      return res.status(400).send('Invalid payload');
+    }
   }
 
-  switch (event.type) {
-    case 'payment_intent.succeeded':
-      console.log('PaymentIntent succeeded:', event.data.object.id);
-      break;
-    case 'payment_intent.payment_failed':
-      console.log('PaymentIntent failed:', event.data.object.id, event.data.object.last_payment_error?.message);
-      break;
-    case 'setup_intent.succeeded':
-      console.log('SetupIntent succeeded:', event.data.object.id);
-      break;
-    default:
-      console.log(`Unhandled Stripe event: ${event.type}`);
+  try {
+    switch (event.type) {
+      case 'payment_intent.succeeded': {
+        const pi = event.data.object;
+        await Payment.update({ status: 1 }, { where: { transaction_id: pi.id, status: 0 } });
+        const payment = await Payment.findOne({ where: { transaction_id: pi.id } });
+        if (payment?.order_id) {
+          await Order.update({ status: 7 }, { where: { id: payment.order_id } });
+        }
+        break;
+      }
+      case 'payment_intent.payment_failed': {
+        const pi = event.data.object;
+        await Payment.update({ status: 2 }, { where: { transaction_id: pi.id, status: 0 } });
+        break;
+      }
+      case 'setup_intent.succeeded':
+        break;
+      default:
+        break;
+    }
+  } catch (err) {
+    console.error('Webhook handler error:', err.message);
   }
 
   res.json({ received: true });

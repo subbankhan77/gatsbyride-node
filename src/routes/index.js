@@ -81,11 +81,13 @@ router.get('/order-status-user/:id', customerAuth,                              
 router.get('/driver_location',     customerAuth,                                       orderController.getDriverLocation);
 router.get('/price-check',         customerAuth,                                       orderController.getTotalPrice);
 
+router.post('/stripe/create-intent', customerAuth,                                     paymentController.createPaymentIntent);
 router.post('/stripe/setup-intent', customerAuth,                                      paymentController.createSetupIntent);
 router.post('/card/detail/add',    customerAuth,                                       paymentController.addCard);
 router.post('/card/list',          customerAuth,                                       paymentController.listCards);
 router.post('/card/delete',        customerAuth,                                       paymentController.deleteCard);
-router.post('/driver/payment',     customerAuth, validatePayment,                      paymentController.chargePayment);
+router.post('/driver/payment',          customerAuth, validatePayment,                 paymentController.chargePayment);
+router.post('/stripe/confirm-payment', customerAuth,                                    paymentController.confirmPayment);
 
 router.post('/update/fcm/token',   customerAuth,                                       authController.updateCustomerFcmToken);
 router.get('/logout',              customerAuth,                                       authController.customerLogout);
