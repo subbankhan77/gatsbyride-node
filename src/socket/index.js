@@ -18,6 +18,7 @@ const lastEtaUpdate = new Map();
 const lastMysqlSync = new Map();
 const MYSQL_SYNC_INTERVAL = 30000;
 const offlineTimers = new Map();
+const orderCustomerCache = new Map(); // order_id -> customer_id cache
 
 function setupSocket(io) {
   io.use((socket, next) => {
@@ -143,6 +144,30 @@ function setupSocket(io) {
       if (order_id) {
         io.to(`order_${order_id}`).emit('driver_location_update', { ...locationPayload, order_id });
 
+        // customer ko purana PHP format mein bhi bhejo (UpdatedLatLong)
+        let customerId = orderCustomerCache.get(order_id);
+        if (!customerId) {
+          try {
+            const orderRow = await Order.findByPk(order_id, { attributes: ['customer_id'] });
+            if (orderRow?.customer_id) {
+              customerId = orderRow.customer_id;
+              orderCustomerCache.set(order_id, customerId);
+            }
+          } catch (e) {
+            console.error('[driver_location] customer_id lookup error:', e.message);
+          }
+        }
+        if (customerId) {
+          io.to(`customer_${customerId}`).emit('message', {
+            Response: 'true',
+            message: 'Data Found',
+            type: 'UpdatedLatLong',
+            Latitude: lat,
+            Longitude: lng,
+            bearing: bearing ?? 0,
+          });
+        }
+
         const lastUpdate = lastEtaUpdate.get(order_id) || 0;
         if (now - lastUpdate >= 30000) {
           lastEtaUpdate.set(order_id, now);
@@ -180,9 +205,10 @@ function setupSocket(io) {
 
       await Order.update({ status }, { where: { id: order_id } });
 
-      if (status == 8) {
+      if (status == 8 || status == 7) {
         stopDispatch(order_id).catch(() => {});
         if (driver_id) setDriverFree(driver_id).catch(() => {});
+        orderCustomerCache.delete(order_id);
       }
 
       if (customer_id) io.to(`customer_${customer_id}`).emit('order_status_update', { order_id, status });
