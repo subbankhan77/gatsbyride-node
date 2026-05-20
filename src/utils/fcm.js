@@ -29,11 +29,15 @@ async function sendNotification(fcmToken, title, body, data = {}) {
     data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
     android: { priority: 'high' },
     apns: {
+      headers: {
+        'apns-priority': '10',
+        'apns-push-type': 'alert',
+      },
       payload: {
         aps: {
           sound: 'default',
           badge: 1,
-          'content-available': 1,   
+          'content-available': 1,
         },
       },
     },
@@ -57,11 +61,15 @@ async function sendMulticastNotification(tokens, title, body, data = {}) {
     data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
     android: { priority: 'high' },
     apns: {
+      headers: {
+        'apns-priority': '10',
+        'apns-push-type': 'alert',
+      },
       payload: {
         aps: {
           sound: 'default',
           badge: 1,
-          'content-available': 1,   
+          'content-available': 1,
         },
       },
     },

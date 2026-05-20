@@ -272,8 +272,17 @@ exports.driverUpdateOrderStatus = async (req, res) => {
         [ORDER_STATUS.COMPLETE]: 'Trip completed',
         [ORDER_STATUS.CANCEL]: 'Trip cancelled',
       };
+      const bodies = {
+        [ORDER_STATUS.DRIVER_ACCEPT]: 'Your driver has accepted the ride',
+        [ORDER_STATUS.DEPARTURE_TO_CUSTOMER]: 'Your driver is heading to your location',
+        [ORDER_STATUS.ARRIVAL_AT_CUSTOMER]: 'Your driver has arrived at your pickup point',
+        [ORDER_STATUS.DEPARTURE_TO_DESTINATION]: 'Your trip is now in progress',
+        [ORDER_STATUS.ARRIVAL_AT_DESTINATION]: 'You have arrived at your destination',
+        [ORDER_STATUS.COMPLETE]: 'Your trip has been completed',
+        [ORDER_STATUS.CANCEL]: 'Your trip has been cancelled',
+      };
       if (titles[status]) {
-        await sendNotification(order.Customer.fcm_token, titles[status], '', { order_id: String(order_id), type: 'status_update', status: String(status) });
+        await sendNotification(order.Customer.fcm_token, titles[status], bodies[status] || '', { order_id: String(order_id), type: 'status_update', status: String(status) });
       }
     }
 
