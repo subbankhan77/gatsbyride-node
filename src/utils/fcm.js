@@ -37,7 +37,6 @@ async function sendNotification(fcmToken, title, body, data = {}) {
         aps: {
           sound: 'default',
           badge: 1,
-          'content-available': 1,
         },
       },
     },
@@ -69,7 +68,6 @@ async function sendMulticastNotification(tokens, title, body, data = {}) {
         aps: {
           sound: 'default',
           badge: 1,
-          'content-available': 1,
         },
       },
     },
