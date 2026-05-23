@@ -1,4 +1,3 @@
-
 const { redis } = require('../config/redis');
 const { Order, Customer } = require('../models');
 const { sendNotification } = require('./fcm');
@@ -42,6 +41,14 @@ async function dispatchNext(orderId, io) {
     io.to(`customer_${order.customer_id}`).emit('lookingForDriver', {
       order_id: orderId,
       message: 'Looking for another driver...',
+    });
+    io.to(`customer_${order.customer_id}`).emit('message', {
+      type: 'LookingForDriver',
+      Response: 'true',
+      data: {
+        order_id: orderId,
+        message: 'Looking for another driver...',
+      },
     });
   }
 
@@ -143,7 +150,9 @@ async function _sendToCurrentDriver(state, io) {
       '🚗 New Ride Request!',
       `Pickup: ${order.start_address || 'New location'}`,
       {
-        type: 'new_ride',
+        type: 'CustomerBookRequest',
+        serviceType: 'CustomerBookRequest',
+        id: String(order_id),
         order_id: String(order_id),
         customer_id: String(order.customer_id),
         vehicle_category_id: String(order.vehicle_category_id || ''),
@@ -181,6 +190,14 @@ async function _noDriverAvailable(orderId, io) {
     io.to(`customer_${order.customer_id}`).emit('noDriverAvailable', {
       order_id: orderId,
       message: 'No drivers available nearby. Please try again.',
+    });
+    io.to(`customer_${order.customer_id}`).emit('message', {
+      type: 'NoDriver',
+      Response: 'true',
+      data: {
+        order_id: orderId,
+        message: 'No drivers available nearby. Please try again.',
+      },
     });
   }
 
