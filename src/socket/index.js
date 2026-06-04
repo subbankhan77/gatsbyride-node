@@ -283,7 +283,6 @@ function setupSocket(io) {
 
           console.log(`✅ Emitting Accept to customer_${order.customer_id}`);
           io.to(`customer_${order.customer_id}`).emit('message', payload);
-
           Customer.findByPk(order.customer_id, { attributes: ['fcm_token'] })
             .then((customer) => {
               if (customer?.fcm_token) {

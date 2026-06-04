@@ -120,9 +120,9 @@ exports.updateOrderStatus = async (req, res) => {
     if (!order) return apiResponse(res, 404, false, 'Order not found');
 
     if (status == ORDER_STATUS.CANCEL) {
-      stopDispatch(order_id).catch(() => { });
+      stopDispatch(order_id).catch(() => {});
       if (order.driver_id) {
-        setDriverFree(order.driver_id).catch(() => { });
+        setDriverFree(order.driver_id).catch(() => {});
       }
     }
 
@@ -244,15 +244,15 @@ exports.driverUpdateOrderStatus = async (req, res) => {
     if (status == ORDER_STATUS.DRIVER_ACCEPT) {
       updateData.start_time = new Date();
       await Driver.update({ is_available: 1 }, { where: { id: req.user.id } });
-      setDriverBusy(req.user.id).catch(() => { });
-      stopDispatch(order_id).catch(() => { });
+      setDriverBusy(req.user.id).catch(() => {});
+      stopDispatch(order_id).catch(() => {});
     }
     if (status == ORDER_STATUS.COMPLETE || status == ORDER_STATUS.CANCEL) {
       updateData.end_time = new Date();
       if (actual_distance) updateData.actual_distance = actual_distance;
       if (actual_time) updateData.actual_time = actual_time;
       await Driver.update({ is_available: 0 }, { where: { id: req.user.id } });
-      setDriverFree(req.user.id).catch(() => { });
+      setDriverFree(req.user.id).catch(() => {});
     }
 
     await order.update(updateData);
@@ -442,7 +442,7 @@ exports.updateEndTrip = async (req, res) => {
     });
 
     await Driver.update({ is_available: 0 }, { where: { id: req.user.id } });
-    setDriverFree(req.user.id).catch(() => { });
+    setDriverFree(req.user.id).catch(() => {});
 
     if (req.io) {
       req.io.to(`customer_${order.customer_id}`).emit('trip_completed', { order_id, grand_total: newTotal });
@@ -530,7 +530,7 @@ exports.driverAcceptOrder = async (req, res) => {
     }
 
     await Driver.update({ is_available: 1 }, { where: { id: req.user.id } });
-    setDriverBusy(req.user.id).catch(() => { });
+    setDriverBusy(req.user.id).catch(() => {});
 
     await stopDispatch(order_id);
 
@@ -564,7 +564,7 @@ exports.getOrderRoute = async (req, res) => {
     const { order_id } = req.params;
     const order = await Order.findByPk(order_id, {
       attributes: ['id', 'start_coordinate', 'end_coordinate', 'start_address',
-        'end_address', 'route_polyline', 'estimated_time', 'status'],
+                   'end_address', 'route_polyline', 'estimated_time', 'status'],
     });
     if (!order) return apiResponse(res, 404, false, 'Order not found');
 
@@ -713,7 +713,15 @@ exports.getOrder = async (req, res) => {
     });
 
     if (!order) return apiResponse(res, 404, false, 'Order not found');
-    return apiResponse(res, 200, true, 'Order details', order);
+
+    const orderJson = order.toJSON();
+    const formatted = {
+      ...orderJson,
+      order_status: orderJson.status,
+      driver_id: orderJson.driver_id ?? order.Driver?.id ?? null,
+    };
+
+    return res.status(200).json({ status: true, message: 'Order details', order: formatted, data: formatted });
   } catch (err) {
     return apiResponse(res, 500, false, err.message);
   }
