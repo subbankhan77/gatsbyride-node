@@ -9,6 +9,7 @@ const {
   driverOffline,
   setDriverBusy,
   setDriverFree,
+  getDriverLocationFromRedis,
 } = require('../utils/driverLocation');
 const { stopDispatch, getCurrentDispatchDriver } = require('../utils/dispatchQueue');
 const { redis } = require('../config/redis');
@@ -206,8 +207,8 @@ function setupSocket(io) {
       await Order.update({ status }, { where: { id: order_id } });
 
       if (status == 8 || status == 7) {
-        stopDispatch(order_id).catch(() => {});
-        if (driver_id) setDriverFree(driver_id).catch(() => {});
+        stopDispatch(order_id).catch(() => { });
+        if (driver_id) setDriverFree(driver_id).catch(() => { });
         orderCustomerCache.delete(order_id);
       }
 
@@ -230,9 +231,9 @@ function setupSocket(io) {
 
         console.log(`✅ Accept received: order=${resolvedOrderId} driver=${driverId}`);
 
-        stopDispatch(resolvedOrderId).catch(() => {});
-        setDriverBusy(driverId).catch(() => {});
-        redis.del(`driver:pending_order:${driverId}`).catch(() => {});
+        stopDispatch(resolvedOrderId).catch(() => { });
+        setDriverBusy(driverId).catch(() => { });
+        redis.del(`driver:pending_order:${driverId}`).catch(() => { });
 
         try {
           const order = await Order.findOne({
@@ -283,6 +284,19 @@ function setupSocket(io) {
           console.log(`✅ Emitting Accept to customer_${order.customer_id}`);
           io.to(`customer_${order.customer_id}`).emit('message', payload);
 
+          Customer.findByPk(order.customer_id, { attributes: ['fcm_token'] })
+            .then((customer) => {
+              if (customer?.fcm_token) {
+                sendNotification(
+                  customer.fcm_token,
+                  'Driver Found!',
+                  'Your driver has accepted the ride and is on the way.',
+                  { type: 'Accept', order_id: String(resolvedOrderId) }
+                ).catch((err) => console.error('Accept FCM error:', err.message));
+              }
+            })
+            .catch(() => { });
+
         } catch (err) {
           console.error('Accept handler error:', err.message);
         }
@@ -310,6 +324,10 @@ function setupSocket(io) {
               'start_coordinate', 'end_coordinate',
             ],
           });
+
+          if (order) {
+            console.log(`🗺️  ChangeStatus ${Status} coords — start: ${order.start_coordinate} | end: ${order.end_coordinate}`);
+          }
 
           if (!order) {
             console.error(`ChangeStatus: Order ${csOrderId} not found`);
@@ -352,24 +370,76 @@ function setupSocket(io) {
               pending_amount: 0,
               estimated_time: 0,
               actual_time: actualTime || 0,
-              Latitude: Latitude ?? '',
-              Longitude: Longitude ?? '',
+              Latitude: Latitude || '',
+              Longitude: Longitude || '',
             },
           };
 
           if (String(Status) === '7') {
-            setDriverFree(driverId).catch(() => {});
+            setDriverFree(driverId).catch(() => { });
             payload.data.actual_distance = distance || order.actual_distance;
           }
 
           if (String(Status) === '8') {
-            setDriverFree(driverId).catch(() => {});
-            stopDispatch(csOrderId).catch(() => {});
+            setDriverFree(driverId).catch(() => { });
+            stopDispatch(csOrderId).catch(() => { });
+          }
+
+          // Driver ne Latitude/Longitude nahi bheja — Redis se last known position lo
+          if (!payload.data.Latitude || !payload.data.Longitude) {
+            try {
+              const loc = await getDriverLocationFromRedis(driverId);
+              if (loc) {
+                payload.data.Latitude = loc.latitude;
+                payload.data.Longitude = loc.longitude;
+                console.log(`📍 ChangeStatus ${Status}: driver location Redis se mili (${loc.latitude},${loc.longitude})`);
+              }
+            } catch (locErr) {
+              console.warn(`ChangeStatus location fallback error: ${locErr.message}`);
+            }
           }
 
           io.to(`customer_${order.customer_id}`).emit('message', payload);
 
           console.log(`✅ ChangeStatus ${Status} (${eventType}) → customer_${order.customer_id}`);
+
+          // FCM: customer background mein ho to bhi notification mile
+          const fcmTitles = {
+            '2': 'Driver On the Way',
+            '3': 'Driver Arrived',
+            '5': 'Ride Started',
+            '7': 'Ride Completed',
+            '8': 'Ride Cancelled',
+          };
+          const fcmBodies = {
+            '2': 'Your driver is heading to your pickup location.',
+            '3': 'Your driver has reached your pickup location. Please come outside.',
+            '5': 'Your ride has started. Enjoy your trip!',
+            '7': 'Your ride has ended. Thank you for riding with Gatsby!',
+            '8': 'Your driver has cancelled the ride. Please search for another driver.',
+          };
+          if (fcmTitles[String(Status)]) {
+            Customer.findByPk(order.customer_id, { attributes: ['fcm_token'] })
+              .then(async (customer) => {
+                if (!customer?.fcm_token) {
+                  console.warn(`⚠️ FCM skip: customer ${order.customer_id} has no fcm_token (status ${Status})`);
+                  return;
+                }
+                console.log(`🔔 FCM sending to customer ${order.customer_id} (status ${Status}): "${fcmTitles[String(Status)]}"`);
+                try {
+                  const result = await sendNotification(
+                    customer.fcm_token,
+                    fcmTitles[String(Status)],
+                    fcmBodies[String(Status)],
+                    { type: eventType, order_id: String(csOrderId), status: String(Status) }
+                  );
+                  console.log(`✅ FCM sent to customer ${order.customer_id} (status ${Status}):`, result);
+                } catch (err) {
+                  console.error(`❌ FCM error customer ${order.customer_id} (status ${Status}):`, err.message);
+                }
+              })
+              .catch((err) => console.error(`❌ FCM DB lookup error (status ${Status}):`, err.message));
+          }
 
         } catch (err) {
           console.error('ChangeStatus handler error:', err.message);
@@ -405,7 +475,7 @@ function setupSocket(io) {
 
           await Order.update({ status: 8 }, { where: { id: orderId, status: 0 } });
 
-          stopDispatch(orderId).catch(() => {});
+          stopDispatch(orderId).catch(() => { });
 
           const cancelPayload = {
             type: 'CancelOrder',
@@ -415,7 +485,7 @@ function setupSocket(io) {
 
           if (dispatchDriver?.driver_id) {
             io.to(`driver_${dispatchDriver.driver_id}`).emit('message', cancelPayload);
-            await redis.del(`driver:pending_order:${dispatchDriver.driver_id}`).catch(() => {});
+            await redis.del(`driver:pending_order:${dispatchDriver.driver_id}`).catch(() => { });
             console.log(`🚫 Cancel notified to dispatch driver_${dispatchDriver.driver_id}`);
           }
 
@@ -675,13 +745,13 @@ function setupSocket(io) {
       if (socket.userGuard === 'driver' && socket.userId) {
         const driverId = socket.userId;
 
-        await driverOffline(driverId).catch(() => {});
+        await driverOffline(driverId).catch(() => { });
         lastMysqlSync.delete(driverId);
         io.emit('driver_offline', { driver_id: driverId });
         console.log(`Driver ${driverId} disconnected — waiting 30s before marking offline`);
 
         const driverIdStr = String(driverId);
-        await redis.del(`driver:connected:${driverIdStr}`).catch(() => {});
+        await redis.del(`driver:connected:${driverIdStr}`).catch(() => { });
 
         const timer = setTimeout(async () => {
           offlineTimers.delete(driverIdStr);

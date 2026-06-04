@@ -24,26 +24,26 @@ const driverOnboard = [verifyToken('driver')];
 
 router.use(apiLimiter);
 
-router.post('/login',          loginLimiter,    validateLogin,              authController.customerLogin);
-router.post('/logindriver',    loginLimiter,    validateLogin,              authController.driverLogin);
-router.post('/user_register',  registerLimiter, validateCustomerRegister,   authController.customerRegister);
-router.post('/driver_register',registerLimiter, validateDriverRegister,     authController.driverRegister);
-router.post('/driver/signup',  registerLimiter,                             authController.signUpDriver);
+router.post('/login', loginLimiter, validateLogin, authController.customerLogin);
+router.post('/logindriver', loginLimiter, validateLogin, authController.driverLogin);
+router.post('/user_register', registerLimiter, validateCustomerRegister, authController.customerRegister);
+router.post('/driver_register', registerLimiter, validateDriverRegister, authController.driverRegister);
+router.post('/driver/signup', registerLimiter, authController.signUpDriver);
 
-router.post('/password/forgot',          authController.forgotPassword);
-router.post('/otp/verify',               authController.verifyOtp);
-router.post('/password/reset',           authController.driverResetPassword);
-router.post('/customer/password/reset',  authController.customerResetPassword);
-router.post('/reset-password-user',      authController.resetPassword);
-router.post('/reset-password-driver',    authController.resetPassword);
+router.post('/password/forgot', authController.forgotPassword);
+router.post('/otp/verify', authController.verifyOtp);
+router.post('/password/reset', authController.driverResetPassword);
+router.post('/customer/password/reset', authController.customerResetPassword);
+router.post('/reset-password-user', authController.resetPassword);
+router.post('/reset-password-driver', authController.resetPassword);
 
-router.get('/vehicleCategories',         authController.vehicleCategories);
-router.get('/order/reject/reason/list',   orderController.rejectReasonList);
-router.post('/rating/list',               orderController.getRatingList);
-router.get('/total-price-order',          orderController.getTotalPrice);
-router.post('/priceCategory',             orderController.priceCategory);
-router.get('/getAllDriverLocation',        orderController.getAllDriverLocations);
-router.get('/distance/:pickup',           orderController.getDrivingDistanceRoute);
+router.get('/vehicleCategories', authController.vehicleCategories);
+router.get('/order/reject/reason/list', orderController.rejectReasonList);
+router.post('/rating/list', orderController.getRatingList);
+router.get('/total-price-order', orderController.getTotalPrice);
+router.post('/priceCategory', orderController.priceCategory);
+router.get('/getAllDriverLocation', orderController.getAllDriverLocations);
+router.get('/distance/:pickup', orderController.getDrivingDistanceRoute);
 
 router.post('/upload',
   driverOnboard,
@@ -66,32 +66,33 @@ router.post('/customerUpload',
   }
 );
 
-router.get('/user_profile',        customerAuth,                                       profileController.getCustomerProfile);
-router.post('/customer/create/profile', customerAuth,                                  profileController.customerCreateProfile);
-router.post('/edit_profile_user',  customerAuth, upload.single('image'),               profileController.updateCustomerProfile);
-router.post('/update-email-user',  customerAuth,                                       profileController.updateCustomerEmail);
-router.post('/update-password-user',customerAuth,                                      profileController.updateCustomerPassword);
+router.get('/user_profile', customerAuth, profileController.getCustomerProfile);
+router.post('/customer/create/profile', customerAuth, profileController.customerCreateProfile);
+router.post('/edit_profile_user', customerAuth, upload.single('image'), profileController.updateCustomerProfile);
+router.post('/update-email-user', customerAuth, profileController.updateCustomerEmail);
+router.post('/update-password-user', customerAuth, profileController.updateCustomerPassword);
 
-router.post('/send_order',         customerAuth, validateCreateOrder,                  orderController.createOrder);
-router.post('/updateStatus',       customerAuth,                                       orderController.updateOrderStatus);
-router.get('/history_order_user',  customerAuth,                                       orderController.customerOrderHistory);
-router.get('/order',               customerAuth,                                       orderController.getCustomerOrders);
-router.get('/order-status-user/:id', customerAuth,                                     orderController.checkOrderStatusByUser);
+router.post('/send_order', customerAuth, validateCreateOrder, orderController.createOrder);
+router.post('/updateStatus', customerAuth, orderController.updateOrderStatus);
+router.get('/history_order_user', customerAuth, orderController.customerOrderHistory);
+router.get('/order', customerAuth, orderController.getCustomerOrders);
+router.get('/order-status-user/:id', customerAuth, orderController.checkOrderStatusByUser);
+router.get('/getOrder', customerAuth, orderController.getOrder);
 
-router.get('/driver_location',     customerAuth,                                       orderController.getDriverLocation);
-router.get('/price-check',         customerAuth,                                       orderController.getTotalPrice);
+router.get('/driver_location', customerAuth, orderController.getDriverLocation);
+router.get('/price-check', customerAuth, orderController.getTotalPrice);
 
-router.post('/stripe/create-intent', customerAuth,                                     paymentController.createPaymentIntent);
-router.post('/stripe/setup-intent', customerAuth,                                      paymentController.createSetupIntent);
-router.post('/card/detail/add',    customerAuth,                                       paymentController.addCard);
-router.post('/card/list',          customerAuth,                                       paymentController.listCards);
-router.post('/card/delete',        customerAuth,                                       paymentController.deleteCard);
-router.post('/driver/payment',          customerAuth, validatePayment,                 paymentController.chargePayment);
-router.post('/stripe/confirm-payment', customerAuth,                                    paymentController.confirmPayment);
+router.post('/stripe/create-intent', customerAuth, paymentController.createPaymentIntent);
+router.post('/stripe/setup-intent', customerAuth, paymentController.createSetupIntent);
+router.post('/card/detail/add', customerAuth, paymentController.addCard);
+router.post('/card/list', customerAuth, paymentController.listCards);
+router.post('/card/delete', customerAuth, paymentController.deleteCard);
+router.post('/driver/payment', customerAuth, validatePayment, paymentController.chargePayment);
+router.post('/stripe/confirm-payment', customerAuth, paymentController.confirmPayment);
 
-router.post('/update/fcm/token',   customerAuth,                                       authController.updateCustomerFcmToken);
-router.get('/logout',              customerAuth,                                       authController.customerLogout);
-router.delete('/customer/account/delete', customerAuth,                                authController.deleteCustomer);
+router.post('/update/fcm/token', customerAuth, authController.updateCustomerFcmToken);
+router.get('/logout', customerAuth, authController.customerLogout);
+router.delete('/customer/account/delete', customerAuth, authController.deleteCustomer);
 
 router.post('/driver/profile/details/add', driverOnboard, upload.fields([
   { name: 'profile_photo', maxCount: 1 },
@@ -105,36 +106,36 @@ router.post('/driver/vehicle/details/add', driverOnboard, upload.fields([
 
 router.post('/driver/bank/details/add', driverOnboard, profileController.addDriverBankDetails);
 
-router.get('/driver/profile',          driverAuth,                                 profileController.getDriverProfile);
-router.post('/driver/update-profile',  driverAuth, upload.single('image'),         profileController.updateDriverProfile);
-router.post('/driver/update-coordinate', driverAuth,                               profileController.updateDriverCoordinate);
-router.post('/driver/update-email',    driverAuth,                                 profileController.updateDriverEmail);
-router.post('/driver/update-password', driverAuth,                                 profileController.updateDriverPassword);
+router.get('/driver/profile', driverAuth, profileController.getDriverProfile);
+router.post('/driver/update-profile', driverAuth, upload.single('image'), profileController.updateDriverProfile);
+router.post('/driver/update-coordinate', driverAuth, profileController.updateDriverCoordinate);
+router.post('/driver/update-email', driverAuth, profileController.updateDriverEmail);
+router.post('/driver/update-password', driverAuth, profileController.updateDriverPassword);
 
-router.get('/driver/list-order',       driverAuth,                                 orderController.driverListOrders);
-router.get('/driver/order-status',     driverAuth,                                 orderController.driverGetOrderStatus);
-router.get('/driver/order',            driverAuth,                                 orderController.driverOrderHistory);
-router.post('/driver/update-status',   driverAuth,                                 orderController.driverUpdateOrderStatus);
-router.post('/driver/order/reject',    driverAuth,                                 orderController.driverRejectOrder);
-router.post('/driver/requests/new',    driverAuth,                                 orderController.driverNewRequests);
-router.post('/driver/accept-order',    driverAuth, validateAcceptOrder,            orderController.driverAcceptOrder);
-router.post('/driver/update/end/trip', driverAuth,                                 orderController.updateEndTrip);
-router.post('/driver/order/receipt',   driverAuth,                                 orderController.driverOrderReceipt);
+router.get('/driver/list-order', driverAuth, orderController.driverListOrders);
+router.get('/driver/order-status', driverAuth, orderController.driverGetOrderStatus);
+router.get('/driver/order', driverAuth, orderController.driverOrderHistory);
+router.post('/driver/update-status', driverAuth, orderController.driverUpdateOrderStatus);
+router.post('/driver/order/reject', driverAuth, orderController.driverRejectOrder);
+router.post('/driver/requests/new', driverAuth, orderController.driverNewRequests);
+router.post('/driver/accept-order', driverAuth, validateAcceptOrder, orderController.driverAcceptOrder);
+router.post('/driver/update/end/trip', driverAuth, orderController.updateEndTrip);
+router.post('/driver/order/receipt', driverAuth, orderController.driverOrderReceipt);
 
-router.post('/driver/set-status',      driverAuth,                                 profileController.setDriverStatus);
-router.get('/driver/get-status',       driverAuth,                                 profileController.getDriverStatus);
+router.post('/driver/set-status', driverAuth, profileController.setDriverStatus);
+router.get('/driver/get-status', driverAuth, profileController.getDriverStatus);
 
-router.post('/driver/payment/confirmation', driverAuth,                            paymentController.paymentConfirmation);
-router.post('/driver/update/fcm/token',     driverAuth,                            authController.updateDriverFcmToken);
-router.get('/driver/logout',                driverAuth,                            authController.driverLogout);
-router.delete('/driver/account/delete',     driverAuth,                            authController.deleteDriver);
+router.post('/driver/payment/confirmation', driverAuth, paymentController.paymentConfirmation);
+router.post('/driver/update/fcm/token', driverAuth, authController.updateDriverFcmToken);
+router.get('/driver/logout', driverAuth, authController.driverLogout);
+router.delete('/driver/account/delete', driverAuth, authController.deleteDriver);
 
 router.get('/order/route/:order_id', orderController.getOrderRoute);
-router.get('/surge/check',           orderController.getSurgeInfo);
+router.get('/surge/check', orderController.getSurgeInfo);
 router.get('/order/chat/:order_id', verifyToken('customer'), orderController.getChatHistory);
 router.get('/driver/order/chat/:order_id', verifyToken('driver'), orderController.getChatHistory);
 
-router.post('/order/rating',        verifyToken('customer'), orderController.submitRating);
-router.post('/driver/order/rating', verifyToken('driver'),   orderController.submitRating);
+router.post('/order/rating', verifyToken('customer'), orderController.submitRating);
+router.post('/driver/order/rating', verifyToken('driver'), orderController.submitRating);
 
 module.exports = router;
