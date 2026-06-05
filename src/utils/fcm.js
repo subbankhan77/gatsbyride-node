@@ -23,11 +23,18 @@ initFirebase();
 async function sendNotification(fcmToken, title, body, data = {}) {
   if (!firebaseApp || !fcmToken) return;
 
+  const enrichedData = {
+    title: String(title),
+    body: String(body),
+    ...Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
+  };
+
   const message = {
     token: fcmToken,
-    notification: { title, body },
-    data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
-    android: { priority: 'high' },
+    data: enrichedData,
+    android: {
+      priority: 'high',
+    },
     apns: {
       headers: {
         'apns-priority': '10',
@@ -35,8 +42,10 @@ async function sendNotification(fcmToken, title, body, data = {}) {
       },
       payload: {
         aps: {
+          alert: { title: String(title), body: String(body) },
           sound: 'default',
           badge: 1,
+          'content-available': 1,
         },
       },
     },
@@ -54,11 +63,18 @@ async function sendNotification(fcmToken, title, body, data = {}) {
 async function sendMulticastNotification(tokens, title, body, data = {}) {
   if (!firebaseApp || !tokens || tokens.length === 0) return;
 
+  const enrichedData = {
+    title: String(title),
+    body: String(body),
+    ...Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
+  };
+
   const message = {
     tokens,
-    notification: { title, body },
-    data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
-    android: { priority: 'high' },
+    data: enrichedData,
+    android: {
+      priority: 'high',
+    },
     apns: {
       headers: {
         'apns-priority': '10',
@@ -66,8 +82,10 @@ async function sendMulticastNotification(tokens, title, body, data = {}) {
       },
       payload: {
         aps: {
+          alert: { title: String(title), body: String(body) },
           sound: 'default',
           badge: 1,
+          'content-available': 1,
         },
       },
     },
