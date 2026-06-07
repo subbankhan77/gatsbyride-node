@@ -111,7 +111,7 @@ function setupSocket(io) {
           attributes: ['id'],
         }).catch(() => null);
         if (activeOrder) {
-          await setDriverBusy(driverId).catch(() => { });
+          await setDriverBusy(driverId).catch(() => {});
           console.log(`Driver ${driverId} reconnected with active order ${activeOrder.id} — marked busy`);
         }
 
@@ -154,6 +154,8 @@ function setupSocket(io) {
 
       if (order_id) {
         io.to(`order_${order_id}`).emit('driver_location_update', { ...locationPayload, order_id });
+
+        // customer ko purana PHP format mein bhi bhejo (UpdatedLatLong)
         let customerId = orderCustomerCache.get(order_id);
         if (!customerId) {
           try {
@@ -215,8 +217,8 @@ function setupSocket(io) {
       await Order.update({ status }, { where: { id: order_id } });
 
       if (status == 8 || status == 7) {
-        stopDispatch(order_id).catch(() => { });
-        if (driver_id) setDriverFree(driver_id).catch(() => { });
+        stopDispatch(order_id).catch(() => {});
+        if (driver_id) setDriverFree(driver_id).catch(() => {});
         orderCustomerCache.delete(order_id);
         orderDriverCache.delete(order_id);
       }
@@ -240,9 +242,9 @@ function setupSocket(io) {
 
         console.log(`✅ Accept received: order=${resolvedOrderId} driver=${driverId}`);
 
-        stopDispatch(resolvedOrderId).catch(() => { });
-        setDriverBusy(driverId).catch(() => { });
-        redis.del(`driver:pending_order:${driverId}`).catch(() => { });
+        stopDispatch(resolvedOrderId).catch(() => {});
+        setDriverBusy(driverId).catch(() => {});
+        redis.del(`driver:pending_order:${driverId}`).catch(() => {});
 
         try {
           const order = await Order.findOne({
@@ -292,6 +294,8 @@ function setupSocket(io) {
 
           console.log(`✅ Emitting Accept to customer_${order.customer_id}`);
           io.to(`customer_${order.customer_id}`).emit('message', payload);
+
+          // FCM: customer background mein ho to bhi notification mile
           Customer.findByPk(order.customer_id, { attributes: ['fcm_token'] })
             .then((customer) => {
               if (customer?.fcm_token) {
@@ -303,7 +307,7 @@ function setupSocket(io) {
                 ).catch((err) => console.error('Accept FCM error:', err.message));
               }
             })
-            .catch(() => { });
+            .catch(() => {});
 
         } catch (err) {
           console.error('Accept handler error:', err.message);
@@ -384,19 +388,20 @@ function setupSocket(io) {
           };
 
           if (String(Status) === '7') {
-            setDriverFree(driverId).catch(() => { });
+            setDriverFree(driverId).catch(() => {});
             payload.data.actual_distance = distance || order.actual_distance;
             orderDriverCache.delete(csOrderId);
             orderCustomerCache.delete(csOrderId);
           }
 
           if (String(Status) === '8') {
-            setDriverFree(driverId).catch(() => { });
-            stopDispatch(csOrderId).catch(() => { });
+            setDriverFree(driverId).catch(() => {});
+            stopDispatch(csOrderId).catch(() => {});
             orderDriverCache.delete(csOrderId);
             orderCustomerCache.delete(csOrderId);
           }
 
+          // Driver ne Latitude/Longitude nahi bheja — Redis se last known position lo
           if (!payload.data.Latitude || !payload.data.Longitude) {
             try {
               const loc = await getDriverLocationFromRedis(driverId);
@@ -412,7 +417,10 @@ function setupSocket(io) {
 
           io.to(`customer_${order.customer_id}`).emit('message', payload);
           io.to(`driver_${driverId}`).emit('message', { ...payload, type: `${eventType}_ack` });
+
           console.log(`✅ ChangeStatus ${Status} (${eventType}) → customer_${order.customer_id} + driver_${driverId}`);
+
+          // FCM: customer background mein ho to bhi notification mile
           const fcmTitles = {
             '2': 'Driver On the Way',
             '3': 'Driver Arrived',
@@ -484,7 +492,7 @@ function setupSocket(io) {
 
           await Order.update({ status: 8 }, { where: { id: orderId, status: 0 } });
 
-          stopDispatch(orderId).catch(() => { });
+          stopDispatch(orderId).catch(() => {});
 
           const cancelPayload = {
             type: 'CancelOrder',
@@ -494,7 +502,7 @@ function setupSocket(io) {
 
           if (dispatchDriver?.driver_id) {
             io.to(`driver_${dispatchDriver.driver_id}`).emit('message', cancelPayload);
-            await redis.del(`driver:pending_order:${dispatchDriver.driver_id}`).catch(() => { });
+            await redis.del(`driver:pending_order:${dispatchDriver.driver_id}`).catch(() => {});
             console.log(`🚫 Cancel notified to dispatch driver_${dispatchDriver.driver_id}`);
           }
 
@@ -811,7 +819,8 @@ function setupSocket(io) {
 
         offlineTimers.set(driverIdStr, timer);
 
-        redis.del(`driver:connected:${driverIdStr}`).catch(() => { });
+        // Async cleanup — non-blocking
+        redis.del(`driver:connected:${driverIdStr}`).catch(() => {});
         lastMysqlSync.delete(driverId);
       }
     });

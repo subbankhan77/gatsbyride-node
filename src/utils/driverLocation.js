@@ -19,6 +19,7 @@ async function driverOnline(driverId, { latitude, longitude, bearing = 0, vehicl
       'vehicle_category_id', vehicle_category_id || '',
       'fcm_token', fcm_token || '',
       'driver_id', id,
+      'is_available', '1',
     ),
     redis.expire(metaKey(id), 3600),
   ]);
