@@ -19,7 +19,8 @@ const lastEtaUpdate = new Map();
 const lastMysqlSync = new Map();
 const MYSQL_SYNC_INTERVAL = 30000;
 const offlineTimers = new Map();
-const orderCustomerCache = new Map(); // order_id -> customer_id cache
+const orderCustomerCache = new Map(); 
+const orderDriverCache = new Map();  
 
 function setupSocket(io) {
   io.use((socket, next) => {
@@ -105,6 +106,15 @@ function setupSocket(io) {
           if (results[1].status === 'rejected') console.error(`join_driver Redis error driver ${driverId}:`, results[1].reason?.message);
         });
 
+        const activeOrder = await Order.findOne({
+          where: { driver_id: driverId, status: [1, 2, 3, 5] },
+          attributes: ['id'],
+        }).catch(() => null);
+        if (activeOrder) {
+          await setDriverBusy(driverId).catch(() => { });
+          console.log(`Driver ${driverId} reconnected with active order ${activeOrder.id} — marked busy`);
+        }
+
         socket.broadcast.emit('driver_online', { driver_id: driverId });
         console.log(`Driver ${driverId} is online (lat=${lat}, lng=${lng})`);
       } catch (err) {
@@ -144,8 +154,6 @@ function setupSocket(io) {
 
       if (order_id) {
         io.to(`order_${order_id}`).emit('driver_location_update', { ...locationPayload, order_id });
-
-        // customer ko purana PHP format mein bhi bhejo (UpdatedLatLong)
         let customerId = orderCustomerCache.get(order_id);
         if (!customerId) {
           try {
@@ -210,6 +218,7 @@ function setupSocket(io) {
         stopDispatch(order_id).catch(() => { });
         if (driver_id) setDriverFree(driver_id).catch(() => { });
         orderCustomerCache.delete(order_id);
+        orderDriverCache.delete(order_id);
       }
 
       if (customer_id) io.to(`customer_${customer_id}`).emit('order_status_update', { order_id, status });
@@ -377,14 +386,17 @@ function setupSocket(io) {
           if (String(Status) === '7') {
             setDriverFree(driverId).catch(() => { });
             payload.data.actual_distance = distance || order.actual_distance;
+            orderDriverCache.delete(csOrderId);
+            orderCustomerCache.delete(csOrderId);
           }
 
           if (String(Status) === '8') {
             setDriverFree(driverId).catch(() => { });
             stopDispatch(csOrderId).catch(() => { });
+            orderDriverCache.delete(csOrderId);
+            orderCustomerCache.delete(csOrderId);
           }
 
-          // Driver ne Latitude/Longitude nahi bheja — Redis se last known position lo
           if (!payload.data.Latitude || !payload.data.Longitude) {
             try {
               const loc = await getDriverLocationFromRedis(driverId);
@@ -399,10 +411,8 @@ function setupSocket(io) {
           }
 
           io.to(`customer_${order.customer_id}`).emit('message', payload);
-
-          console.log(`✅ ChangeStatus ${Status} (${eventType}) → customer_${order.customer_id}`);
-
-          // FCM: customer background mein ho to bhi notification mile
+          io.to(`driver_${driverId}`).emit('message', { ...payload, type: `${eventType}_ack` });
+          console.log(`✅ ChangeStatus ${Status} (${eventType}) → customer_${order.customer_id} + driver_${driverId}`);
           const fcmTitles = {
             '2': 'Driver On the Way',
             '3': 'Driver Arrived',
@@ -479,7 +489,7 @@ function setupSocket(io) {
           const cancelPayload = {
             type: 'CancelOrder',
             Response: 'true',
-            data: { order_id: orderId, message: 'Customer ne order cancel kar diya' },
+            data: { order_id: orderId, message: 'Order cancel by  customer' },
           };
 
           if (dispatchDriver?.driver_id) {
@@ -738,20 +748,50 @@ function setupSocket(io) {
       }
     });
 
-    socket.on('disconnect', async () => {
+    socket.on('customer_location', async (data) => {
+      const { customer_id, order_id, latitude, longitude } = data;
+      const customerId = customer_id || socket.userId;
+
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+      if (isNaN(lat) || isNaN(lng)) return;
+
+      try {
+        let orderId = order_id;
+        let driverId = orderId ? orderDriverCache.get(orderId) : null;
+
+        if (orderId && !driverId) {
+          const order = await Order.findByPk(orderId, { attributes: ['driver_id'] });
+          if (order?.driver_id) {
+            driverId = order.driver_id;
+            orderDriverCache.set(orderId, driverId);
+          }
+        }
+
+        if (driverId) {
+          io.to(`driver_${driverId}`).emit('customer_location_update', {
+            customer_id: customerId,
+            order_id: orderId,
+            latitude: lat,
+            longitude: lng,
+          });
+        }
+      } catch (err) {
+        console.error('[customer_location] error:', err.message);
+      }
+    });
+
+    socket.on('disconnect', () => {
       console.log(`Socket disconnected: ${socket.id} | user: ${socket.userId}`);
 
       if (socket.userGuard === 'driver' && socket.userId) {
         const driverId = socket.userId;
+        const driverIdStr = String(driverId);
 
-        await driverOffline(driverId).catch(() => { });
-        lastMysqlSync.delete(driverId);
-        io.emit('driver_offline', { driver_id: driverId });
         console.log(`Driver ${driverId} disconnected — waiting 30s before marking offline`);
 
-        const driverIdStr = String(driverId);
-        await redis.del(`driver:connected:${driverIdStr}`).catch(() => { });
-
+        // Store timer BEFORE any async work — prevents race where reconnect
+        // fires join_driver between timer creation and map storage
         const timer = setTimeout(async () => {
           offlineTimers.delete(driverIdStr);
           const isReconnected = await redis.get(`driver:connected:${driverIdStr}`).catch(() => null);
@@ -760,7 +800,9 @@ function setupSocket(io) {
             return;
           }
           try {
+            await driverOffline(driverId);
             await Driver.update({ order_status: 'offline' }, { where: { id: driverId } });
+            io.emit('driver_offline', { driver_id: driverId });
             console.log(`Driver ${driverId} is now offline (grace period expired)`);
           } catch (e) {
             console.error('Offline sync error:', e.message);
@@ -768,6 +810,9 @@ function setupSocket(io) {
         }, 30000);
 
         offlineTimers.set(driverIdStr, timer);
+
+        redis.del(`driver:connected:${driverIdStr}`).catch(() => { });
+        lastMysqlSync.delete(driverId);
       }
     });
   });
