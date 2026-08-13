@@ -155,6 +155,7 @@ function setupSocket(io) {
       if (order_id) {
         io.to(`order_${order_id}`).emit('driver_location_update', { ...locationPayload, order_id });
 
+        // customer ko purana PHP format mein bhi bhejo (UpdatedLatLong)
         let customerId = orderCustomerCache.get(order_id);
         if (!customerId) {
           try {
@@ -294,6 +295,7 @@ function setupSocket(io) {
           console.log(`✅ Emitting Accept to customer_${order.customer_id}`);
           io.to(`customer_${order.customer_id}`).emit('message', payload);
 
+          // FCM: customer background mein ho to bhi notification mile
           Customer.findByPk(order.customer_id, { attributes: ['fcm_token'] })
             .then((customer) => {
               if (customer?.fcm_token) {
@@ -399,6 +401,7 @@ function setupSocket(io) {
             orderCustomerCache.delete(csOrderId);
           }
 
+          // Driver ne Latitude/Longitude nahi bheja — Redis se last known position lo
           if (!payload.data.Latitude || !payload.data.Longitude) {
             try {
               const loc = await getDriverLocationFromRedis(driverId);
@@ -464,7 +467,7 @@ function setupSocket(io) {
         const { UserID, OrderID } = data;
         console.log(`🚗 UserBookDriver (via message): Customer ${UserID} joining order_${OrderID} room`);
         try {
-          const order = await Order.findByPk(OrderID, { attributes: ['id', 'customer_id', 'status'] });
+          const order = await Order.findByPk(OrderID, { attributes: ['id', 'customer_id'] });
           if (!order) {
             socket.emit('noDriverAvailable', { order_id: OrderID, message: 'Order not found' });
             return;
@@ -472,20 +475,6 @@ function setupSocket(io) {
           socket.join(`customer_${UserID}`);
           socket.join(`order_${OrderID}`);
           console.log(`✅ Customer ${UserID} joined customer_${UserID} + order_${OrderID} rooms`);
-
-          // Race condition fix: agar dispatch pehle hi complete ho gaya aur koi driver nahi mila
-          if (order.status === 8) {
-            console.log(`⚠️  Order ${OrderID} already cancelled (no driver) — notifying customer ${UserID}`);
-            socket.emit('noDriverAvailable', {
-              order_id: OrderID,
-              message: 'No drivers available nearby. Please try again.',
-            });
-            socket.emit('message', {
-              type: 'NoDriver',
-              Response: 'true',
-              data: { order_id: OrderID, message: 'No drivers available nearby. Please try again.' },
-            });
-          }
         } catch (err) {
           console.error('❌ UserBookDriver (message) error:', err.message);
         }
@@ -809,6 +798,8 @@ function setupSocket(io) {
 
         console.log(`Driver ${driverId} disconnected — waiting 30s before marking offline`);
 
+        // Store timer BEFORE any async work — prevents race where reconnect
+        // fires join_driver between timer creation and map storage
         const timer = setTimeout(async () => {
           offlineTimers.delete(driverIdStr);
           const isReconnected = await redis.get(`driver:connected:${driverIdStr}`).catch(() => null);
@@ -828,6 +819,7 @@ function setupSocket(io) {
 
         offlineTimers.set(driverIdStr, timer);
 
+        // Async cleanup — non-blocking
         redis.del(`driver:connected:${driverIdStr}`).catch(() => {});
         lastMysqlSync.delete(driverId);
       }
